@@ -1,0 +1,627 @@
+---
+title: \sf ATAC-seq analysis on Xanadu
+header-includes:
+- \usepackage{color}
+- \usepackage{float}
+- \DeclareUnicodeCharacter{2212}{-}
+author: Michael Guertin
+date: "May 16, 2022"
+output:
+  bookdown::html_document2:
+    toc: true
+fontsize: 14pt
+geometry: margin=1in
+---
+\sffamily
+
+
+
+# Logging into the Xanadu cluster 
+
+To access the cluster you need to login with **ssh** (secure shell):
+
+```{r engine='bash', eval=F, echo=TRUE}
+ssh <user_name>@xanadu-submit-ext.cam.uchc.edu 
+
+# you user name looks like this:
+ssh ssun@xanadu-submit-ext.cam.uchc.edu 
+```
+
+# Tranferring data to and from the cluster
+
+To move files in between computer you can login with **sftp** use **scp** (secure copy):
+
+## **`sftp`**: 
+
+`ftp` stands for "File Transfer Protocol", `sftp` is " Secure File Transfer Protocol".  In other words, with sftp, a useraccount and password are required.\
+```{r engine='bash', eval=F, echo=TRUE}
+
+sftp  <your_username>@<host_name>
+```
+For the Xanadu cluster, there is a special partition for transferring data:
+
+```{r engine='bash', eval=F, echo=TRUE}
+
+sftp ssun@transfer.cam.uchc.edu
+```
+
+**1.** You can then navigate to the directory where you want to take files from.\
+**2.** **put** and **get** can be used to move files from or to your computer, respectively \
+
+## **`scp`**
+**scp** can be used without logging in provided you know the exact location where your file of interest is or will go. We will primarily use `sftp` in this course.
+
+```{r engine='bash', eval=F, echo=TRUE}
+# for copying TO the server
+scp -r <path_to_directory> <your_username>@transfer.cam.uchc.edu:~/path/to/target/folder
+```
+
+You should be prompted for a password.  If not, the transfer probably failed.
+```{r engine='bash', eval=F, echo=TRUE}
+# for copying FROM the server
+scp -r <your_username>@<host_name>:<target_directory> 
+```
+
+### How do we know if transfer was complete?
+
+There's a program called `md5` (mac) or `md5sum` (linux) that can help us with this.  It returns a compact digital fingerprint for each file.  Any change to the file will result in a different fingerprint.
+
+on a mac:
+```{r engine='bash', eval=F, echo=TRUE}
+md5 Macrophage_15min_rep1_PE1.fastq.gz
+```
+
+on Linux:
+```{r engine='bash', eval=F, echo=TRUE}
+md5sum Macrophage_15min_rep1_PE1.fastq.gz
+```
+
+## Exercise 1: Inspecting, retrieving, and checking files from server
+
+**1** Log onto the server using ssh \
+**2** Navigate to your folder in `/labs/Guertin/siyu` \
+**3** View the checksum string for the file `Macrophage_15min_rep1_PE1.fastq.gz`. \
+**4** Logout and return to your home directory or open a new terminal window (command-t) \
+**5** Transfer the file to your computer using sftp \
+**6** Confirm that the transfer was complete \
+
+# Running interactive sessions and batch scripts on Xanadu
+
+Xanadu uses the SLURM (Simple Linux Utility for Resource Management) language to manage workloads.\
+Documentation:\
+[https://slurm.schedmd.com/](https://slurm.schedmd.com/)
+
+## Interactive session
+
+### Important: All actions that require CPU or memory should be run from an interactive session to avoid jamming the head node.
+
+The head node is like a lobby where everyone enters a space, but actions should not be taken here.  You should request a 'room' or interactive session in which to conduct your business.\
+
+To see if you are on the head node you can use the `hostname` command. If the `hostname` ends in `.cam.uchc.edu`, then you are on the head node. If the `hostname` is `xanadu-*`, then you are in an interactive session. If you are not working in an interactive session, then `exit` so that resources are available to other users.
+
+
+
+```{r engine='bash', eval=F, echo=TRUE}
+
+hostname
+#simplest way to start a session
+srun --pty -p general --qos=general  bash
+hostname
+exit
+hostname
+
+#request 4 cores and 16 Gb of RAM (this is what I typically request)
+srun --pty --qos=general -p general -c 4 --mem=16G bash
+
+hostname
+exit
+```
+
+To confirm that you are indeed in an interactive session, try the 'hostname' command and it should return `xanadu-<n>`
+
+
+## Batch scripts
+Sbatch (Slurm Batch) scripts need to start with a header that contains important information for running and reporting the output of your script. `sbatch-template.sh`
+```{r engine='bash', eval=F, echo=TRUE}
+#!/bin/bash
+
+#SBATCH --job-name=hello.sh     # name for job
+#SBATCH -N 1                    # number of nodes 
+#SBATCH -n 1                    # number of jobs / tasks 
+#SBATCH -c 1                    # number of cores 
+#SBATCH -p general           # SLURM partition 
+#SBATCH --qos=general        # SLURM Quality of service 
+#SBATCH --mem=1G                # RAM (memory) requested 
+#SBATCH --mail-type=ALL 
+#SBATCH --mail-user=ssun@uchc.edu
+#SBATCH -o scriptname.sh_%j.out
+#SBATCH -e scriptname.sh_%j.err
+
+hostname # have this at beginning of every script for  troubleshooting
+
+<your script>
+```
+
+here is a random script:
+```{r engine='bash', eval=F, echo=TRUE}
+#! /bin/sh
+list="1 0 3 6"
+
+for x in $list
+  do
+# sleep for a few minutes so it is not immediately completed!  
+  	sleep 30s
+    echo Welcome to Batch submissions
+    echo $x
+  done
+
+echo $list
+```
+
+Here is one way to save it as a file:
+
+```{r engine='bash', eval=F, echo=TRUE}
+touch welcome_batch.sh
+nano welcome_batch.sh
+
+# copy and paste the batch header and script into the nano text editor 
+# Ctrl + O (save--also use the text prompt to rename if needed)
+# Enter
+# Ctrl + X (exit)
+```
+
+We can add this script to our batch script and rename it `welcome_batch.sh`. \
+To run the script we use:
+
+```{r engine='bash', eval=F, echo=TRUE}
+sbatch welcome_batch.sh
+```
+
+To check the status there are several options:
+
+```{r engine='bash', eval=F, echo=TRUE}
+squeue #check the status of the entire queue
+
+squeue -u <usrID> # check the status of all jobs by a user
+
+squeue -j <jobID>  # Check status of specific job
+
+```
+
+If something is wrong and you want to kill a job:
+```{r engine='bash', eval=F, echo=TRUE}
+scancel <jobID>
+```
+
+You can also check the status of the server to see how busy it is with **`sinfo`**
+```{r engine='bash', eval=F, echo=TRUE}
+sinfo --format="%10P  %6t %15O %15C %15F %10m %10e %15n %30E %10u" 
+```
+
+## In class exercise 1:  running and altering batch scripts
+
+**1.** Copy the `sbatch-template.sh` script from above into your home directory. \
+**2** Add the `welcome_batch.sh` script to your batch script, and adjust the other user input (email, jobID, etc) appropriately. \
+**3.** Save and run the script. Where did the output go?                
+**4.** create a `sbatch-output` folder in your home directory and alter the sbatch script such that the output and errors go to this folder. \
+**5.** intentionally create an error in your script (e.g. add double quotes but don't close them), and run the script again. Now check the error file to see an example of error outputs. \
+**6.** Use the sbatch script to run another script from your scripts folder by calling it directly.  i.e. instead of having the `welcome-batch` script commands in the sbatch file, create another script and run that with the batch script. \
+
+# Server operations: Using `module` to temporarily load functions:
+
+We're going to use the `cutadapt` and `bowtie2` amongst other software.  These programs are on the server, however, we need to load them into our session for use. On our own machine we made sure the programs were in our **`$PATH`**.  On the server we can use the **`module`** to load and have access to specific functions during your session without altering your **`$PATH`**.  This provides flexibility and specificity in running software versions.
+\
+First, view which modules are available:
+```{r engine='bash', eval=F, echo=TRUE}
+module avail  
+```
+
+We can check specifically for sratoolkit:
+
+```{r engine='bash', eval=F, echo=TRUE}
+module avail cutadapt
+```
+Once you find the one you're looking for:
+
+```{r engine='bash', eval=F, echo=TRUE}
+module load <software>  
+```
+
+This is **convenient** because you can add module functions to your shell scripts to be sure that you are using the correct software versions.  \
+
+**AND** \
+You don't have to waste time adding lots of programs to your `$PATH`\
+\
+It is **flexible** because it allows you to even switch between version of software on the fly.  For instance: \
+
+```{r engine='bash', eval=F, echo=TRUE}
+# load software
+module load <software_v.2>   
+
+# do something
+some commands, etc.
+#unload software and load another version
+module unload <software_v.2>
+module load <software_v.1>
+
+# do something else
+more commands, etc.
+```
+## Server operations: Running jobs in the background 
+
+* One problem with working on the server is that if you start a command and it takes a while, you're stuck.  
+* To get around this you can run the operation in the background using the **'&'** symbol.
+* This runs the program in the **background**, allowing you to continue using your command prompt while the program is executed. \
+* To start a command in the background just add **`&`** to the end of the command. 
+* You should get a process ID number: a unique identifier that allows you to track that operation.\
+
+To see what processes are running you can use several commands:  
+
+* **top**: continuous monitoring of activity \
+* **ps** or 'process': shows the activity under your user and only shows that activity at that instance (snapshot). \
+* **qstat**: when you're on the server. \
+* **squeue**: (covered previously) can show jobs by, user, ID, or node.\
+
+
+## Killing jobs
+To stop runaway processes or ones that are taking too long in the background, you cannot use the normal **Control-c**.  You can, however, **scancel** the process using the process ID number.
+```{r engine='bash', eval=F, echo=TRUE}
+# when on the Xanadu server
+scancel <process_ID>
+```
+You can also run jobs in the background on your own machine.  In this case, you can use **`kill`** to cancel jobs.
+
+```{r engine='bash', eval=F, echo=TRUE}
+kill <process_ID>
+```
+
+You can review other ways to view activities on the server and kill processes here: [http://bioinformatics.uconn.edu/unix-basics/](http://bioinformatics.uconn.edu/unix-basics/)
+
+
+# Text editors 
+When you are writing a script, it is usually done locally (not on the server) and either copied into a server text editor such as `emacs` or `nano` or transfered with `sftp`. Certain text editors are designed for scripting and can recognize code.  Importantly, they do not embed the document or fonts with hidden characteristics that can cause problems when running programs on you computer  There are three features that you should look for in an editor:\
+
+**1.** language specific highlighting \ 
+**2.** line number display \ 
+**3.** version control \
+
+**MAC USERS:** Download BBedit here: [http://www.barebones.com/products/bbedit/download.html?ref=tw_alert](http://www.barebones.com/products/bbedit/download.html?ref=tw_alert): http://www.barebones.com/products/bbedit/download.html?ref=tw_alert and then install it:
+
+Open your text editor: **gedit** on Linux or **BBEdit** or **textEdit** on Mac.
+
+
+**Note:** You can also use **nano** or other command line editors such as `emacs` or `vim`.  I can advise in `nano` or `emacs`, but limited experience with `vim`.\
+
+
+A quick primer for `nano` is:
+
+```{r engine='bash', eval=F, echo=TRUE}
+touch filename.sh
+
+nano filename.sh
+
+# write some code
+
+ctrl-O save or use backspace to save as another name
+
+make edits
+
+ctrl-O to save
+
+ctrl-X to exit
+
+```
+
+The first line is the [Shebang](http://en.wikipedia.org/wiki/Shebang_%28Unix%29) line:
+```{r engine='bash', eval=F, echo=TRUE}
+#! /bin/sh
+
+or sometimes
+
+#! /usr/bin/sh
+```
+
+to find out where your shell is type:
+```{r engine='bash', eval=F, echo=TRUE}
+which sh
+```
+
+Let's try a simple script:
+```{r engine='bash', eval=F, echo=TRUE}
+ls -la
+echo "Above are the directory listings for the following folder"
+pwd
+```
+
+Create a new folder in your folder called *'scripts'*
+\
+Save your script as `ls.sh`
+\
+Go to the directory where ls.sh is and try to execute it:
+```{r engine='bash', eval=F, echo=TRUE}
+./ls.sh
+```
+In order to run this script we need to give the proper permissions.  To see permissions for files, type:
+```{r engine='bash', eval=F, echo=TRUE}
+ls -la
+```
+The columns are:
+
+**1.** permissions \
+**2.** owner \
+**3.** group \
+**4.** size \
+**5.** last modifiation \
+**6.** name \ 
+ 
+
+In permissions: 'd'=directory, '-' = file, 'r' = read, 'w' = write, 'x' = execute.
+\
+Three sets of permissions are shown: User (owner), Group, Other users.
+
+To give permission to execute type:
+```{r engine='bash', eval=F, echo=TRUE}
+chmod +x ls.sh
+```
+Now use `ls -la` to view permissions and then try to execute.
+
+
+
+
+
+
+
+
+
+# Aligning ATAC-seq data
+
+## Obtain the reference genomes
+First we need to download the three genomes we will align to: the chrM of mm39, hg38, and mm39. I always download from UCSC, Google "mm39 downloads ucsc" or the alike to get here: 
+[https://hgdownload.soe.ucsc.edu/goldenPath/mm39/bigZips/](https://hgdownload.soe.ucsc.edu/goldenPath/mm39/bigZips/) \
+
+In order to get the `chrM` file you need to get the `mm39.chromFa.tar.gz` file and unzip/untar it. Then make a directory for your `mm39` references, move `chrM.fa` into this directory, then delete everything we don't need. Navigate to mm39 and download the full genome file. Then do the same for `hg38`—see if you can get this link from poking around UCSC.
+
+```{r engine='bash', eval=F, echo=TRUE}
+
+wget https://hgdownload.soe.ucsc.edu/goldenPath/mm39/bigZips/mm39.chromFa.tar.gz
+
+tar -xzf mm39.chromFa.tar.gz
+
+mkdir mm39
+
+mv chrM.fa mm39 
+
+rm chr*.fa
+rm mm39.chromFa.tar.gz
+
+cd mm39
+ls
+wget https://hgdownload.soe.ucsc.edu/goldenPath/mm39/bigZips/mm39.fa.gz
+
+cd ..
+
+mkdir hg38
+
+cd hg38
+
+wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/latest/hg38.fa.gz
+```
+
+## Index reference genomes
+
+Bowtie 2 is an efficient tool for aligning sequencing reads to long reference sequences.  The first task is to build the genome index with bowtie2 [http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#the-bowtie2-build-indexer](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#the-bowtie2-build-indexer). This only has to be performed once per genome, but we are aligning to three separate genomes in this workflow. 
+
+```{r engine='bash', eval=F, echo=TRUE}
+
+module load bowtie2
+
+gunzip hg38.fa.gz 
+
+bowtie2-build hg38.fa hg38
+
+cd ../mm39
+bowtie2-build chrM.fa chrM_mm39
+gunzip mm39.fa.gz
+bowtie2-build mm39.fa mm39
+```
+
+## Clip off adapter sequences
+
+As Illumina reads become longer, the more likely it becomes that a read sequences into the adapter used to generate the library. A first step in most molecular genomics analyses is adapter clipping. There are many tools that accomplish this task, but we typically use `cutadapt`. \
+
+As an aside, there are more efficient ways to analyze data than writing a loop to go through the files in series. However, this is what I typically do in vignettes to make things simple. The quickest way I know of executing all these looped commands on all the files in parallel is to write a loop to go through all the files, pass the variable name `$name` as an argument to a script that generates a new `sbatch` script for each file set (PE1 and PE2), and execute the newly created `sbatch` script within the loop. I can show you an example if you'd like. \
+
+Another aside: these are big files. If you want to make sure the scripts and commands are working, I recommend heading the first 400,000 lines of each PE file (`zcat Macrophage_rep1_PE1.fastq.gz | head -4000000 > test_PE1.fastq`), zipping, then running the commands only on these files so they finish quickly.
+
+/home/FCAM/mguertin/software/fastq_pair
+
+```{r engine='bash', eval=F, echo=TRUE}
+module load cutadapt
+
+for fq in *PE1.fastq.gz
+do
+    name=$(echo $fq | awk -F"_PE1.fastq.gz" '{print $1}')
+    echo $name
+    gunzip $fq
+    gunzip ${name}_PE2.fastq.gz
+    cutadapt -j 2 -m 10 -O 1 -a CTGTCTCTTATACACATCT ${name}_PE1.fastq -o ${name}_PE1_no_adapt.fastq
+    cutadapt -j 2 -m 10 -O 1 -a CTGTCTCTTATACACATCT ${name}_PE2.fastq -o ${name}_PE2_no_adapt.fastq
+    gzip ${name}_PE1.fastq
+    gzip ${name}_PE2.fastq
+done
+```
+
+## Re-pairing paired end files
+
+`cutadapt` will discard reads with very short inserts, so the next step involves repairing the PE1 and PE2 files with `fastq_pair`. You can either download and install this, or you should be able to copy or execute the version I download and compiled onto Xanadu: `/home/FCAM/mguertin/software/fastq_pair`. I recommend putting it in a `software` directory and adding this directory to your `$PATH`—please let me know if you need a tutorial on the `$PATH` variable and your `.bash_profile` and `.bashrc` files. Next we will zip all the output files and move on to alignment with `bowtie2`.
+
+```{r engine='bash', eval=F, echo=TRUE}
+for fq in *PE1.fastq.gz
+do
+    name=$(echo $fq | awk -F"_PE1.fastq.gz" '{print $1}')
+    echo $name
+    fastq_pair ${name}_PE1_no_adapt.fastq ${name}_PE2_no_adapt.fastq
+    gzip ${name}_PE1_no_adapt.fastq
+    gzip ${name}_PE2_no_adapt.fastq
+    gzip ${name}_PE1_no_adapt.fastq.paired.fq
+    gzip ${name}_PE2_no_adapt.fastq.paired.fq
+done
+```
+
+## Sequential alignments
+
+The alignment steps include aligning to the mitochondrial chromosome, taking everything that does not align, aligning that to hg38, taking everything that does not align, then aligning that to mm39. There are some housekeeping commands included below, like pairing, zipping, and removing duplicate PE reads (i.e. each member of a pair align to the exact positions as another pair).
+
+the `-p $ncore` option says to use 6 cores, but you are welcome to generate an `sbatch` script and ask for 30+ cores if you want the process to go quicker. A lot of the commands are hard coded, but it is better practice to initialize all the variable names in the header and pass the variables as arguments. 
+
+
+```{r engine='bash', eval=F, echo=TRUE}
+module load bowtie2
+module load samtools
+module load bedtools 
+
+ncore=6
+
+for fq in *PE1.fastq.gz
+do
+    name=$(echo $fq | awk -F"_PE1.fastq.gz" '{print $1}')
+    echo $name
+# align the chrM first, convert to BAM file and remove duplicates    
+	bowtie2 -p $ncore --maxins 800 -x mm39/chrM_mm39 -1 ${name}_PE1_no_adapt.fastq.paired.fq.gz -2 ${name}_PE2_no_adapt.fastq.paired.fq.gz | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.bam
+	samtools index $name.bam
+# extract all reads that do not align and generate FASTQs 	
+    samtools view -b $name.bam '*' | samtools sort -n - | bamToFastq -i - -fq ${name}_PE1.chrM_mm39.fastq -fq2 ${name}_PE2.chrM_mm39.fastq
+    fastq_pair ${name}_PE1.chrM_mm39.fastq ${name}_PE2.chrM_mm39.fastq
+    gzip ${name}_PE1.chrM_mm39.fastq.paired.fq
+    gzip ${name}_PE2.chrM_mm39.fastq.paired.fq
+    gzip ${name}_PE1.chrM_mm39.fastq
+    gzip ${name}_PE2.chrM_mm39.fastq
+# align to hg38 to get rid of the Jurkat reads    
+    bowtie2 -p $ncore --maxins 800 -x hg38/hg38 -1 ${name}_PE1.chrM_mm39.fastq.paired.fq.gz -2 ${name}_PE2.chrM_mm39.fastq.paired.fq | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.hg38.bam
+    samtools index $name.hg38.bam
+# makes FASTQs out of everyhting that does not align    
+    samtools view -b $name.hg38.bam '*' | samtools sort -n - | bamToFastq -i - -fq ${name}_PE1.hg38.fastq -fq2 ${name}_PE2.hg38.fastq
+    fastq_pair ${name}_PE1.hg38.fastq ${name}_PE2.hg38.fastq
+    gzip ${name}_PE1.hg38.fastq.paired.fq
+    gzip ${name}_PE2.hg38.fastq.paired.fq
+    gzip ${name}_PE1.hg38.fastq
+    gzip ${name}_PE2.hg38.fastq
+# Finally align to the mm39 genome    
+    bowtie2 -p $ncore --maxins 800 -x mm39/mm39 -1 ${name}_PE1.hg38.fastq.paired.fq.gz -2 ${name}_PE2.hg38.fastq.paired.fq.gz | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.mm39.bam
+done
+```
+
+An alternative and more efficient way to execute these commands, other than the serial loop above, is to automate the process of making a sbatch script and execute the sbatch scripts as resources on the cluster become available. \
+
+First we can generate and open a template file:
+
+
+
+```{r engine='bash', eval=F, echo=TRUE}
+touch sbatch_fill_in_bowtie2_atac.sh
+nano sbatch_fill_in_bowtie2_atac.sh
+```
+Next you can copy your template script with a string that you want replaced with a passed variable.
+
+```{r engine='bash', eval=F, echo=TRUE}
+
+#!/bin/bash
+
+#SBATCH --job-name=hello.sh     # name for job
+#SBATCH -N 1                    # number of nodes 
+#SBATCH -n 1                    # number of jobs / tasks 
+#SBATCH -c 16                    # number of cores 
+#SBATCH -p general           # SLURM partition 
+#SBATCH --qos=general        # SLURM Quality of service 
+#SBATCH --mem=16G                # RAM (memory) requested 
+#SBATCH --mail-type=ALL 
+#SBATCH --mail-user=ssun@uchc.edu
+#SBATCH -o scriptname.sh_%j.out
+#SBATCH -e scriptname.sh_%j.err
+
+hostname 
+
+fq=XXXXXXX
+ncore=16
+
+module load bowtie2
+module load samtools
+module load bedtools 
+
+name=$(echo $fq | awk -F"_PE1.fastq.gz" '{print $1}')
+echo $name
+# align the chrM first, convert to BAM file and remove duplicates    
+bowtie2 -p $ncore --maxins 800 -x mm39/chrM_mm39 -1 ${name}_PE1_no_adapt.fastq.paired.fq.gz -2 ${name}_PE2_no_adapt.fastq.paired.fq.gz | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.bam
+samtools index $name.bam
+# extract all reads that do not align and generate FASTQs 	
+samtools view -b $name.bam '*' | samtools sort -n - | bamToFastq -i - -fq ${name}_PE1.chrM_mm39.fastq -fq2 ${name}_PE2.chrM_mm39.fastq
+fastq_pair ${name}_PE1.chrM_mm39.fastq ${name}_PE2.chrM_mm39.fastq
+gzip ${name}_PE1.chrM_mm39.fastq.paired.fq
+gzip ${name}_PE2.chrM_mm39.fastq.paired.fq
+gzip ${name}_PE1.chrM_mm39.fastq
+gzip ${name}_PE2.chrM_mm39.fastq
+# align to hg38 to get rid of the Jurkat reads    
+bowtie2 -p $ncore --maxins 800 -x hg38/hg38 -1 ${name}_PE1.chrM_mm39.fastq.paired.fq.gz -2 ${name}_PE2.chrM_mm39.fastq.paired.fq | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.hg38.bam
+samtools index $name.hg38.bam
+# makes FASTQs out of everyhting that does not align    
+samtools view -b $name.hg38.bam '*' | samtools sort -n - | bamToFastq -i - -fq ${name}_PE1.hg38.fastq -fq2 ${name}_PE2.hg38.fastq
+fastq_pair ${name}_PE1.hg38.fastq ${name}_PE2.hg38.fastq
+gzip ${name}_PE1.hg38.fastq.paired.fq
+gzip ${name}_PE2.hg38.fastq.paired.fq
+gzip ${name}_PE1.hg38.fastq
+gzip ${name}_PE2.hg38.fastq
+# Finally align to the mm39 genome    
+bowtie2 -p $ncore --maxins 800 -x mm39/mm39 -1 ${name}_PE1.hg38.fastq.paired.fq.gz -2 ${name}_PE2.hg38.fastq.paired.fq.gz | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.mm39.bam
+```
+
+Now you can run an interactive loop that dynamically updates the file name and submits the job. \
+
+
+```{r engine='bash', eval=F, echo=TRUE}
+file=sbatch_fill_in_bowtie2_atac.sh
+
+for i in *PE1.fastq.gz
+do
+	nm=$(echo $i | rev | cut -f 1 -d '/' | rev | cut -f 1 -d '.')
+	fq=$(echo $i | rev | cut -f 1 -d '/' | rev)
+	echo $nm
+	echo $fq
+	sed -e "s/XXXXXXX/${fq}/g" "$file" > ${nm}_sbatch_fill_in_bowtie2_atac.sh
+	sbatch ${nm}_sbatch_fill_in_bowtie2_atac.sh
+done
+```
+
+The few annoying things that can be improved is that the `fastq.gz` files are currently in the working directory because passing a variable with the `/` character included as the string into `sed` causes issues. These issues can most easily be resolved by changing the `sbatch_fill_in_bowtie2_atac.sh` script to have directories coded in the header as variables.
+
+
+
+# ATAC-seq peak calling
+
+The next code chunk calls peaks and generates a 200 base window around the peak summit for _de novo_ motif analysis.
+
+```{r engine='bash', eval=F, echo=TRUE}
+
+module load macs3
+module load bedtools 
+
+wget https://hgdownload.soe.ucsc.edu/goldenPath/mm39/bigZips/mm39.chrom.sizes
+name=macrophage
+atacFiles=$(ls *.mm39.bam)
+
+# call peaks
+macs3 callpeak -t $atacFiles -f BAMPE -g mm -n $name -B --trackline -q 0.01 --outdir ${name}_peaks 2>&1 | tee -a Macrophage_peaks_log.txt
+
+# remove header
+tail +2 ${name}_peaks/${name}_summits.bed > ${name}_summits2.bed
+
+# make a window around the summit
+slopBed -l 99 -r 100 -i ${name}_summits2.bed -g mm39.chrom.sizes > ${name}_summit_window.bed
+
+# sort
+sortBed -i ${name}_summit_window.bed > ${name}_summit_window_sorted.bed
+
+# merge
+mergeBed -i ${name}_summit_window_sorted.bed > ${name}_summit_window_merged.bed
+```
+
+
