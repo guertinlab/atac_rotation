@@ -510,11 +510,11 @@ do
     bowtie2 -p $ncore --maxins 800 -x mm39/mm39 -1 ${name}_PE1.hg38.fastq.paired.fq.gz -2 ${name}_PE2.hg38.fastq.paired.fq.gz | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.mm39.bam
 done
 ```
+## Swarming the cluster with individual jobs for each file/file set
 
 An alternative and more efficient way to execute these commands, other than the serial loop above, is to automate the process of making a sbatch script and execute the sbatch scripts as resources on the cluster become available. \
 
 First we can generate and open a template file:
-
 
 
 ```{r engine='bash', eval=F, echo=TRUE}
@@ -623,5 +623,133 @@ sortBed -i ${name}_summit_window.bed > ${name}_summit_window_sorted.bed
 # merge
 mergeBed -i ${name}_summit_window_sorted.bed > ${name}_summit_window_merged.bed
 ```
+
+# DESeq2 counting in R
+
+There are many versions of `R` available on Xanadu, but version `R/4.1.2` has several of the packages we need for class preinstalled. After loading the module, typing `R` will take you from a command line shell that is interpreted by `bash` to a command line interpreted through the `R` language.  
+
+```{r, engine='bash', eval=F, echo=T}
+srun --pty --qos=general -p general -c 2 --mem=16G bash
+
+module load R/4.1.2
+
+R
+```
+
+I exclusively run `R` interactively and I usually run it locally, so you are welcome to take the files off the server at this point and install these libraries locally. Just make sure to back up the data if you work locally:
+
+
+```{r, engine='R', eval=F, echo=T}
+# load library that are already on Xanadu:
+library(DESeq2)
+library(lattice)
+library(bigWig)
+
+# functions for DESeq2
+get.raw.counts.interval <- function(df, path.to.bigWig, file.prefix = 'M') {
+    df = df[,1:3]
+    vec.names = c()
+    inten.df=data.frame(matrix(ncol = 0, nrow = nrow(df)))
+    for (mod.bigWig in Sys.glob(file.path(path.to.bigWig,
+                                          paste(file.prefix, "*.bigWig", sep ='')))) {
+        factor.name = strsplit(strsplit(mod.bigWig, "/")[[1]][length(strsplit(mod.bigWig, "/")[[1]])], '\\.')[[1]][1]
+        print(factor.name)
+        vec.names = c(vec.names, factor.name)
+        loaded.bw = load.bigWig(mod.bigWig)
+        mod.inten = bed.region.bpQuery.bigWig(loaded.bw, df)
+        inten.df = cbind(inten.df, mod.inten)
+    }
+    colnames(inten.df) = vec.names
+    r.names = paste(df[,1], ':', df[,2], '-', df[,3], sep='')
+    row.names(inten.df) = r.names
+    return(inten.df)
+}
+
+run.deseq.list <- function(mat, untreatedreps = 3, treatedreps = 4) {
+    sample.conditions = factor(c(rep("untreated", untreatedreps) , rep("treated", treatedreps)), levels=c("untreated","treated"))
+    deseq.counts.table = DESeqDataSetFromMatrix(mat, DataFrame(sample.conditions), ~ sample.conditions);
+    colData(deseq.counts.table)$condition<-factor(colData(deseq.counts.table)$sample.conditions, levels=c("untreated","treated"));
+    dds = DESeq(deseq.counts.table);
+    res = results(dds);
+    res = res[order(res$padj),];
+    return(res)
+}
+
+
+plot.ma.lattice.publishable <- function(ma.df, filename = 'file.name', adj = 0.001,
+                                        title.main = "Differential Expression") {
+    ma.df$group <- 'a'
+    ma.df[!is.na(ma.df$padj) & !is.na(ma.df$log2FoldChange) &
+          ma.df$padj < adj & ma.df$log2FoldChange < 0,]$group <- 'b'
+    ma.df[!is.na(ma.df$padj) & !is.na(ma.df$log2FoldChange) &
+          ma.df$padj < adj & ma.df$log2FoldChange > 0,]$group <- 'c'
+    ma.df[ma.df$padj > 0.5 & !is.na(ma.df$padj) & !is.na(ma.df$log2FoldChange) &
+          abs(ma.df$log2FoldChange) < 0.25,]$group <- 'd'
+    pdf(paste("MA_plot_", filename, "_FDR_pval_", as.character(adj),".pdf", sep=''),
+        width=3.83, height=3.83, useDingbats=FALSE)
+    print(xyplot(ma.df$log2FoldChange ~ log(ma.df$baseMean, base=10), groups=ma.df$group,
+                 col=c("grey85","#2290cf","#ce228e", "grey65"),
+                 main=title.main, scales="free", aspect=1, pch=20, cex=0.3,
+                 ylab=expression("log"[2]~"Differential ATAC"),
+                 xlab=expression("log"[10]~"Mean of Normalized Counts"),
+                 par.settings=list(par.xlab.text=list(cex=1.1,font=2),
+                                   par.ylab.text=list(cex=1.1,font=2))))
+    dev.off()
+    return(ma.df)
+}
+
+process.deseq.df <- function(ma.df, filename = 'file.name', adj = 0.001, pval = NA) {
+    decreased =  ma.df[ma.df$padj < adj & !is.na(ma.df$padj) & ma.df$log2FoldChange < 0,];
+    increased =  ma.df[ma.df$padj < adj & !is.na(ma.df$padj) & ma.df$log2FoldChange > 0,];
+    not.different =  ma.df[ma.df$pvalue > 0.2 & !is.na(ma.df$pvalue) & !is.na(ma.df$log2FoldChange) & abs(ma.df$log2FoldChange) < 0.2,];
+
+    coor = rownames(decreased)
+    coor.start = sapply(strsplit(sapply(strsplit(as.character(coor),':'), "[", 2), "-"), "[", 1);
+    coor.end = sapply(strsplit(as.character(coor),'-'), "[", 2)
+    coor.chr = sapply(strsplit(as.character(coor),':'), "[", 1)
+    df.coor = cbind(coor.chr, coor.start, coor.end, as.character(decreased$baseMean), as.character(decreased$log2FoldChange), '+', as.character(decreased$lfcSE), as.character(decreased$pvalue), as.character(decreased$padj))
+    write.table(df.coor, file = paste('decreased_', filename, '_', adj, '_FDR.bed', sep =''), sep = '\t', quote=F, row.names=F, col.names=F)
+    
+    coor = rownames(increased)
+    coor.start = sapply(strsplit(sapply(strsplit(as.character(coor),':'), "[", 2), "-"), "[", 1);
+    coor.end = sapply(strsplit(as.character(coor),'-'), "[", 2)
+    coor.chr = sapply(strsplit(as.character(coor),':'), "[", 1)
+    df.coor = cbind(coor.chr, coor.start, coor.end, as.character(increased$baseMean), as.character(increased$log2FoldChange), '+', as.character(increased$lfcSE), as.character(increased$pvalue), as.character(increased$padj))
+    write.table(df.coor, file = paste('increased_', filename, '_', adj, '_FDR.bed', sep =''), sep = '\t', quote=F, row.names=F, col.names=F)
+
+    coor = rownames(not.different)
+    coor.start = sapply(strsplit(sapply(strsplit(as.character(coor),':'), "[", 2), "-"), "[", 1);
+    coor.end = sapply(strsplit(as.character(coor),'-'), "[", 2)
+    coor.chr = sapply(strsplit(as.character(coor),':'), "[", 1)
+    df.coor = cbind(coor.chr, coor.start, coor.end, as.character(not.different$baseMean), as.character(not.different$log2FoldChange), '+', as.character(not.different$lfcSE), as.character(not.different$pvalue), as.character(not.different$padj))
+    write.table(df.coor, file = paste('notDifferent_', filename, '_', adj, '_FDR.bed', sep =''), sep = '\t', quote=F, row.names=F, col.names=F)
+}
+
+#running processes
+# define variables:
+directory = "/full/path/to/the/bigwig/files"
+MAC.file = read.table("macrophage_summit_window_merged.bed") 
+
+#only count on well annotated chromosomes:
+chr.keep = paste0("chr",c(1:19))
+MAC.file = MAC.file[MAC.file[,1] %in% c(chr.keep, 'chrX', 'chrY'),]
+
+# count reads afalling into your peaks
+df.MAC = get.raw.counts.interval(MAC.file, directory, file.prefix = 'MAC')
+
+# 
+head(df.MAC)
+save(df.MAC, file = "df.MAC.Rdata")
+```
+
+# Running DESeq2
+
+At this point you will have a counts dataframe for each replicate of each condition as a column and each genomic interval as a row. \
+
+At this point I ask that you coordinate with Rudradeep to run PCA and pairwise differential accessibility analysis. He recently did this for PRO-seq and the workflow should be the same. You can work together to add the workflow directly to this `.Rmd` section:
+
+
+# Send me `df.MAC.Rdata` and upload the differential accessibility code chunk
+
 
 
