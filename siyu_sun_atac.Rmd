@@ -624,8 +624,7 @@ sortBed -i ${name}_summit_window.bed > ${name}_summit_window_sorted.bed
 mergeBed -i ${name}_summit_window_sorted.bed > ${name}_summit_window_merged.bed
 ```
 
-
-# Converting BAM to bigWig for counting
+# Converting BAM to bigWIg for counting
 
 This requires `seqOutBias`
 
@@ -638,9 +637,15 @@ do
 done
 ```
 
+
 # DESeq2 counting in R
 
 There are many versions of `R` available on Xanadu, but version `R/4.1.2` has several of the packages we need for class preinstalled. After loading the module, typing `R` will take you from a command line shell that is interpreted by `bash` to a command line interpreted through the `R` language.  
+
+
+
+
+
 
 ```{r, engine='bash', eval=F, echo=T}
 srun --pty --qos=general -p general -c 2 --mem=16G bash

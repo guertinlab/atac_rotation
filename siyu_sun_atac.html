@@ -214,9 +214,10 @@ function toggle_visibility(id1) {
 <li><a href="#swarming-the-cluster-with-individual-jobs-for-each-filefile-set"><span class="toc-section-number">6.6</span> Swarming the cluster with individual jobs for each file/file set</a></li>
 </ul></li>
 <li><a href="#atac-seq-peak-calling"><span class="toc-section-number">7</span> ATAC-seq peak calling</a></li>
-<li><a href="#deseq2-counting-in-r"><span class="toc-section-number">8</span> DESeq2 counting in R</a></li>
-<li><a href="#running-deseq2"><span class="toc-section-number">9</span> Running DESeq2</a></li>
-<li><a href="#send-me-df.mac.rdata-and-upload-the-differential-accessibility-code-chunk"><span class="toc-section-number">10</span> Send me <code>df.MAC.Rdata</code> and upload the differential accessibility code chunk</a></li>
+<li><a href="#converting-bam-to-bigwig-for-counting"><span class="toc-section-number">8</span> Converting BAM to bigWIg for counting</a></li>
+<li><a href="#deseq2-counting-in-r"><span class="toc-section-number">9</span> DESeq2 counting in R</a></li>
+<li><a href="#running-deseq2"><span class="toc-section-number">10</span> Running DESeq2</a></li>
+<li><a href="#send-me-df.mac.rdata-and-upload-the-differential-accessibility-code-chunk"><span class="toc-section-number">11</span> Send me <code>df.MAC.Rdata</code> and upload the differential accessibility code chunk</a></li>
 </ul>
 </div>
 
@@ -705,8 +706,18 @@ sortBed -i ${name}_summit_window.bed &gt; ${name}_summit_window_sorted.bed
 # merge
 mergeBed -i ${name}_summit_window_sorted.bed &gt; ${name}_summit_window_merged.bed</code></pre>
 </div>
-<div id="deseq2-counting-in-r" class="section level1" number="8">
-<h1><span class="header-section-number">8</span> DESeq2 counting in R</h1>
+<div id="converting-bam-to-bigwig-for-counting" class="section level1" number="8">
+<h1><span class="header-section-number">8</span> Converting BAM to bigWIg for counting</h1>
+<p>This requires <code>seqOutBias</code></p>
+<pre class="bash"><code>for i in *.mm39.bam
+do
+    name=$(echo $i | awk -F&quot;.mm39.bam&quot; &#39;{print $1}&#39;)
+    echo $name
+    seqOutBias mm39.fa $i --no-scale --bw=${name}.bigWig --shift-counts --skip-bed
+done</code></pre>
+</div>
+<div id="deseq2-counting-in-r" class="section level1" number="9">
+<h1><span class="header-section-number">9</span> DESeq2 counting in R</h1>
 <p>There are many versions of <code>R</code> available on Xanadu, but version <code>R/4.1.2</code> has several of the packages we need for class preinstalled. After loading the module, typing <code>R</code> will take you from a command line shell that is interpreted by <code>bash</code> to a command line interpreted through the <code>R</code> language.</p>
 <pre class="bash"><code>srun --pty --qos=general -p general -c 2 --mem=16G bash
 
@@ -815,14 +826,14 @@ df.MAC = get.raw.counts.interval(MAC.file, directory, file.prefix = &#39;MAC&#39
 head(df.MAC)
 save(df.MAC, file = &quot;df.MAC.Rdata&quot;)</code></pre>
 </div>
-<div id="running-deseq2" class="section level1" number="9">
-<h1><span class="header-section-number">9</span> Running DESeq2</h1>
+<div id="running-deseq2" class="section level1" number="10">
+<h1><span class="header-section-number">10</span> Running DESeq2</h1>
 <p>At this point you will have a counts dataframe for each replicate of each condition as a column and each genomic interval as a row.<br />
 </p>
 <p>At this point I ask that you coordinate with Rudradeep to run PCA and pairwise differential accessibility analysis. He recently did this for PRO-seq and the workflow should be the same. You can work together to add the workflow directly to this <code>.Rmd</code> section:</p>
 </div>
-<div id="send-me-df.mac.rdata-and-upload-the-differential-accessibility-code-chunk" class="section level1" number="10">
-<h1><span class="header-section-number">10</span> Send me <code>df.MAC.Rdata</code> and upload the differential accessibility code chunk</h1>
+<div id="send-me-df.mac.rdata-and-upload-the-differential-accessibility-code-chunk" class="section level1" number="11">
+<h1><span class="header-section-number">11</span> Send me <code>df.MAC.Rdata</code> and upload the differential accessibility code chunk</h1>
 </div>
 
 
