@@ -430,6 +430,14 @@ bowtie2-build mm39.fa mm39
 As Illumina reads become longer, the more likely it becomes that a read sequences into the adapter used to generate the library. A first step in most molecular genomics analyses is adapter clipping. There are many tools that accomplish this task, but we typically use `cutadapt`. \
 
 As an aside, there are more efficient ways to analyze data than writing a loop to go through the files in series. However, this is what I typically do in vignettes to make things simple. The quickest way I know of executing all these looped commands on all the files in parallel is to write a loop to go through all the files, pass the variable name `$name` as an argument to a script that generates a new `sbatch` script for each file set (PE1 and PE2), and execute the newly created `sbatch` script within the loop. I can show you an example if you'd like. \
+```{r engine='bash', eval=F, echo=TRUE}
+# in the home directory, create the ".bashrc" file
+# open the file and write:
+export PATH="$HOME/bin:$PATH"
+export PATH=$PATH:~/excutive/file/directory
+# each time when open a new Xanadu connection, activate the .bashrc before the commands:
+source ~/.bashrc
+```
 
 Another aside: these are big files. If you want to make sure the scripts and commands are working, I recommend heading the first 400,000 lines of each PE file (`zcat Macrophage_rep1_PE1.fastq.gz | head -4000000 > test_PE1.fastq`), zipping, then running the commands only on these files so they finish quickly.
 
@@ -497,7 +505,7 @@ do
     gzip ${name}_PE1.chrM_mm39.fastq
     gzip ${name}_PE2.chrM_mm39.fastq
 # align to hg38 to get rid of the Jurkat reads    
-    bowtie2 -p $ncore --maxins 800 -x hg38/hg38 -1 ${name}_PE1.chrM_mm39.fastq.paired.fq.gz -2 ${name}_PE2.chrM_mm39.fastq.paired.fq | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.hg38.bam
+    bowtie2 -p $ncore --maxins 800 -x hg38/hg38 -1 ${name}_PE1.chrM_mm39.fastq.paired.fq.gz -2 ${name}_PE2.chrM_mm39.fastq.paired.fq.gz | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.hg38.bam
     samtools index $name.hg38.bam
 # makes FASTQs out of everyhting that does not align    
     samtools view -b $name.hg38.bam '*' | samtools sort -n - | bamToFastq -i - -fq ${name}_PE1.hg38.fastq -fq2 ${name}_PE2.hg38.fastq
@@ -561,7 +569,7 @@ gzip ${name}_PE2.chrM_mm39.fastq.paired.fq
 gzip ${name}_PE1.chrM_mm39.fastq
 gzip ${name}_PE2.chrM_mm39.fastq
 # align to hg38 to get rid of the Jurkat reads    
-bowtie2 -p $ncore --maxins 800 -x hg38/hg38 -1 ${name}_PE1.chrM_mm39.fastq.paired.fq.gz -2 ${name}_PE2.chrM_mm39.fastq.paired.fq | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.hg38.bam
+bowtie2 -p $ncore --maxins 800 -x hg38/hg38 -1 ${name}_PE1.chrM_mm39.fastq.paired.fq.gz -2 ${name}_PE2.chrM_mm39.fastq.paired.fq.gz | samtools view -bS - | samtools sort -n - | samtools fixmate -m - - | samtools sort - | samtools markdup -r - $name.hg38.bam
 samtools index $name.hg38.bam
 # makes FASTQs out of everyhting that does not align    
 samtools view -b $name.hg38.bam '*' | samtools sort -n - | bamToFastq -i - -fq ${name}_PE1.hg38.fastq -fq2 ${name}_PE2.hg38.fastq
@@ -591,18 +599,25 @@ do
 done
 ```
 
-The few annoying things that can be improved is that the `fastq.gz` files are currently in the working directory because passing a variable with the `/` character included as the string into `sed` causes issues. These issues can most easily be resolved by changing the `sbatch_fill_in_bowtie2_atac.sh` script to have directories coded in the header as variables.
+The few annoying things that can be improved is that the `fastq.gz` files are currently in the working directory because passing a variable with the `/` character included as the string into `sed` causes issues. These issues can most easily be resolved by changing the `sbatch_fill_in_bowtie2_atac.sh` script to have directories coded in the header as variables. \
 
-
+One side note: leave enough space in the home directory for this step, un-zipped files are large and can take up to 600G space. use command `du -sh /your/directory/` to check the space usage. \
 
 # ATAC-seq peak calling
 
 The next code chunk calls peaks and generates a 200 base window around the peak summit for _de novo_ motif analysis.
+In the case of error message occurring: xanadu OSError: [Errno 28] No space left on device, we can set the TMPDIR environment variable (Linux, UNIX) by making a temp directory as: 
+```{r engine='bash', eval=F, echo=TRUE}
+mkdir -p ${HOME}/temp
+```
+then export this new temp directory as the new location for the temporary directory. 
 
 ```{r engine='bash', eval=F, echo=TRUE}
 
 module load macs3
 module load bedtools 
+# export temp dir
+export TMPDIR="${HOME}/temp" 
 
 wget https://hgdownload.soe.ucsc.edu/goldenPath/mm39/bigZips/mm39.chrom.sizes
 name=macrophage
@@ -611,10 +626,10 @@ atacFiles=$(ls *.mm39.bam)
 # call peaks
 macs3 callpeak -t $atacFiles -f BAMPE -g mm -n $name -B --trackline -q 0.01 --outdir ${name}_peaks 2>&1 | tee -a Macrophage_peaks_log.txt
 
-# remove header
-tail +2 ${name}_peaks/${name}_summits.bed > ${name}_summits2.bed
+# remove header (start at line 2 of the file) (one edition: use tail -n +2 instead of tail +2)
+tail -n +2 ${name}_peaks/${name}_summits.bed > ${name}_summits2.bed
 
-# make a window around the summit
+# make a 200bp window around the summit
 slopBed -l 99 -r 100 -i ${name}_summits2.bed -g mm39.chrom.sizes > ${name}_summit_window.bed
 
 # sort
