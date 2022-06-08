@@ -761,14 +761,147 @@ head(df.MAC)
 save(df.MAC, file = "df.MAC.Rdata")
 ```
 
-# Running DESeq2
+# Exploration
 
-At this point you will have a counts dataframe for each replicate of each condition as a column and each genomic interval as a row. \
+## format
+```{r, engine='bash', eval=F, echo=T}
+# load library:
+library(DESeq2)
+library(DEGreport)
+library(tibble)
+library(lattice)
+library(tidyr)
+source('https://raw.githubusercontent.com/mjg54/znf143_pro_seq_analysis/master/docs/ZNF143_functions.R')
+```
 
-At this point I ask that you coordinate with Rudradeep to run PCA and pairwise differential accessibility analysis. He recently did this for PRO-seq and the workflow should be the same. You can work together to add the workflow directly to this `.Rmd` section:
+```{r, engine='bash', eval=F, echo=T}
+#load the count table that contains gene counts across all conditions.
+load("/directory/to/df.MAC.Rdata")
+```
+
+```{r, engine='bash', eval=F, echo=T}
+sample.conditions = c(sapply(strsplit(as.character(colnames(df.MAC)), '_'), '[', 2)[1:12], rep("t0",4))
+sample.conditions = factor(sample.conditions, levels=c("t0","15min","30min","45min"))
+
+deseq.counts.table = DESeqDataSetFromMatrix(df.MAC, as.data.frame(sample.conditions), ~ sample.conditions)
+dds = DESeq(deseq.counts.table)
+```
+## PCA
+
+```{r, engine='bash', eval=F, echo=T}
+# generate PCA plot
+rld = rlog(dds, blind=TRUE)
+x = plotPCA(rld, intgroup="sample.conditions", returnData=TRUE)
+plotPCAlattice(x, file = 'PCA_Macrophage_lattice_guertin.pdf')
+```
+## LRT
+
+```{r, engine='bash', eval=F, echo=T}
+#lrt
+dds.lrt = DESeq(dds, test="LRT", reduced = ~ 1)
+res.lrt = results(dds.lrt)
+```
+
+### decide the p adjusted value (FDR) cut-off
+
+```{r, engine='bash', eval=F, echo=T}
+library(dplyr)
+library(tidyr)
+#decide a padj cutoff
+FDR<-as.data.frame(res.lrt$padj)
+FDR$DAregions<-rownames(res.lrt)
+
+pads<-seq(0,210, 0.05)
+FDR$log10padj<-log10(FDR$`res.lrt$padj`)
+FDR$log10padjround<-round(log10(FDR$`res.lrt$padj`), digits=2)
+
+FDR.modi<-na.omit(FDR) %>%count(log10padjround)
+
+for (i in 2:nrow(FDR.modi)){
+  FDR.modi$accum_n[1]=FDR.modi$n[1]
+  FDR.modi$accum_n[i]=FDR.modi$n[i]+FDR.modi$accum_n[(i-1)]
+}
+```
+
+```{r, engine='bash', eval=F, echo=T}
+plot(FDR.modi$log10padjround, FDR.modi$accum_n, xlim=c(-12,0), xaxt='n',
+   xlab="log10padjround", ylab="accumulative number of DA regions", pch=19)
+axis(side=1, at=seq(-100, 0, by=0.5))
+abline(v=-1.3467, col="red", lty=2, lwd=3)
+
+#the closer to 0, the higher the padj
+```
+
+### dynamic peaks
+
+```{r, engine='bash', eval=F, echo=T}
+padj.cutoff = 0.045 
+
+siglrt.re = res.lrt[res.lrt$padj < padj.cutoff & !is.na(res.lrt$padj),]
+
+dim(siglrt.re)                                    
+
+rld_mat <- assay(rld)
+cluster_rlog = rld_mat[rownames(siglrt.re),]
+meta = as.data.frame(sample.conditions)
+rownames(meta) = colnames(cluster_rlog)
+
+save.image('170339_macrophage.Rdata')
+save(cluster_rlog, meta, sample.conditions, file = 'cluster_rlog_pval_0.045.Rdata')
+
+```
+
+### nondynamic peaks
+```{r, engine='bash', eval=F, echo=T}
+#Generate nondynamic peaks set for FIMO.
 
 
-# Send me `df.MAC.Rdata` and upload the differential accessibility code chunk
+```
+### ATAC clustering
+
+running on Xanadu:
+
+module load gcc R
+library(DESeq2)
+library(DEGreport)
+library(tibble)
+library(lattice)
+load('cluster_rlog_pval_0.045.Rdata')
+     
+clusters.all.test.0.045 <- degPatterns(cluster_rlog, metadata = meta, minc = 100, time = "sample.conditions", col=NULL, eachStep = TRUE)
+save(clusters.all.test.0.045, file = '170339_clusters.all.minc100.pval0.045.Rdata')
+
+```{r, engine='bash', eval=F, echo=T}
+#load data
+load('170339_clusters.all.minc100.pval0.045.Rdata') 
+```
+
+```{r, engine='bash', eval=F, echo=T}
+#using plotiing_clusters_LRT.R to optimize plotting functions with a small data frame
+
+plot.df = clusters.all.test.0.045$normalized 
+
+plot.df$sample.conditions = as.character(plot.df$sample.conditions)
+plot.df$sample.conditions[plot.df$sample.conditions == 't0'] = 0
+plot.df$sample.conditions[plot.df$sample.conditions == '15min'] = 15
+plot.df$sample.conditions[plot.df$sample.conditions == '30min'] = 30
+plot.df$sample.conditions[plot.df$sample.conditions == '45min'] = 45
+
+plot.df$sample.conditions = as.numeric(plot.df$sample.conditions)
+plot.df = plot.df[order(plot.df$genes),]
+plot.df = plot.df[order(plot.df$sample.conditions),]
+
+plot.df$cluster = paste('cluster', as.character(plot.df$cluster), sep = '')
+
+plot.df$chr = sapply(strsplit(plot.df$genes, '[.]'), '[', 1)
+plot.df$start = sapply(strsplit(plot.df$genes, '[.]'), '[', 2)
+plot.df$end = sapply(strsplit(plot.df$genes, '[.]'), '[', 3)
+```
+
+### plot
+
+
+#  
 
 
 
