@@ -641,9 +641,11 @@ mergeBed -i ${name}_summit_window_sorted.bed > ${name}_summit_window_merged.bed
 
 # Converting BAM to bigWIg for counting
 
-This requires `seqOutBias`
+On Xanadu; this requires installation of program `seqOutBias`
 
 ```{r, engine='bash', eval=F, echo=T}
+module load genometools/1.5.10 # required for running seqOutBias
+
 for i in *.mm39.bam
 do
     name=$(echo $i | awk -F".mm39.bam" '{print $1}')
@@ -656,9 +658,6 @@ done
 # DESeq2 counting in R
 
 There are many versions of `R` available on Xanadu, but version `R/4.1.2` has several of the packages we need for class preinstalled. After loading the module, typing `R` will take you from a command line shell that is interpreted by `bash` to a command line interpreted through the `R` language.  
-
-
-
 
 
 
@@ -801,6 +800,7 @@ sample.conditions = factor(sample.conditions, levels=c("t0","15min","30min","45m
 deseq.counts.table = DESeqDataSetFromMatrix(df.MAC, as.data.frame(sample.conditions), ~ sample.conditions)
 dds = DESeq(deseq.counts.table)
 ```
+
 ## PCA
 
 ```{r, engine='bash', eval=F, echo=T}
@@ -809,6 +809,9 @@ rld = rlog(dds, blind=TRUE)
 x = plotPCA(rld, intgroup="sample.conditions", returnData=TRUE)
 plotPCAlattice(x, file = 'PCA_Macrophage_lattice_guertin.pdf')
 ```
+
+![PCA_Macrophage](images/PCA_Macrophage_lattice_guertin.jpg)
+
 ## LRT
 
 ```{r, engine='bash', eval=F, echo=T}
@@ -847,7 +850,9 @@ abline(v=-1.3467, col="red", lty=2, lwd=3)
 #the closer to 0, the higher the padj
 ```
 
-### dynamic peaks
+![P_adj_cutoff0.045](images/padj.jpg)
+
+### use the cut-off to extract data that we are interested of
 
 ```{r, engine='bash', eval=F, echo=T}
 padj.cutoff = 0.045 
@@ -861,21 +866,16 @@ cluster_rlog = rld_mat[rownames(siglrt.re),]
 meta = as.data.frame(sample.conditions)
 rownames(meta) = colnames(cluster_rlog)
 
-save.image('170339_macrophage.Rdata')
+save.image('220609_macrophage.Rdata') # year==22, month==06, day ==09
 save(cluster_rlog, meta, sample.conditions, file = 'cluster_rlog_pval_0.045.Rdata')
 
 ```
 
-### nondynamic peaks
-```{r, engine='bash', eval=F, echo=T}
-#Generate nondynamic peaks set for FIMO.
 
-
-```
 ### ATAC clustering
 
 running on Xanadu:
-
+```{r, engine='bash', eval=F, echo=T}
 module load gcc R
 library(DESeq2)
 library(DEGreport)
@@ -884,11 +884,16 @@ library(lattice)
 load('cluster_rlog_pval_0.045.Rdata')
      
 clusters.all.test.0.045 <- degPatterns(cluster_rlog, metadata = meta, minc = 100, time = "sample.conditions", col=NULL, eachStep = TRUE)
-save(clusters.all.test.0.045, file = '170339_clusters.all.minc100.pval0.045.Rdata')
+save(clusters.all.test.0.045, file = '220609_clusters.all.minc100.pval0.045.Rdata')
+```
+
+Note that `degPatterns` doesn't calculate significant difference between groups, so the matrix used as input should be already filtered to contain only genes that are significantly different or the most interesting genes to study. \
+
+`minc`: integer minimum number of genes in a group that will be return. \
 
 ```{r, engine='bash', eval=F, echo=T}
 #load data
-load('170339_clusters.all.minc100.pval0.045.Rdata') 
+load('220609_clusters.all.minc100.pval0.045.Rdata') 
 ```
 
 ```{r, engine='bash', eval=F, echo=T}
@@ -913,10 +918,347 @@ plot.df$start = sapply(strsplit(plot.df$genes, '[.]'), '[', 2)
 plot.df$end = sapply(strsplit(plot.df$genes, '[.]'), '[', 3)
 ```
 
+### dynamic peaks
+
+```{r, engine='bash', eval=F, echo=T}
+save(plot.df,file='plot.df.Rdata')
+
+write.table(cbind(plot.df$chr, plot.df$start, plot.df$end), 
+            file = 'dynamic_peaks.bed', quote = FALSE, 
+            sep = '\t', col.names=FALSE, row.names=FALSE)
+```
+
+### nondynamic peaks
+```{r, engine='bash', eval=F, echo=T}
+#Generate nondynamic peaks set for FIMO.
+
+
+```
+
 ### plot
 
+#### (1)plot individual clusters
+```{r, engine='bash', eval=F, echo=T}
+#just plot loess
 
-#  
+loess.df = data.frame(matrix(ncol = 3, nrow = 0),  stringsAsFactors = FALSE)
+colnames(loess.df) = c('ATAC','time','cluster')
+for (i in unique(plot.df$cluster)){
+    ATAC = loess.smooth(plot.df[plot.df$cluster == i,]$sample.conditions, plot.df[plot.df$cluster == i,]$value,  span = 1/2, degree = 1, family = c("gaussian"))$y
+    time = loess.smooth(plot.df[plot.df$cluster == i,]$sample.conditions, plot.df[plot.df$cluster == i,]$value, span = 1/2, degree = 1, family = c("gaussian"))$x
+    new = as.data.frame(cbind(ATAC, time, i),  stringsAsFactors = FALSE)
+    colnames(new) = c('ATAC','time','cluster')
+    new$ATAC = as.numeric(new$ATAC)
+    new$time = as.numeric(new$time)
+    loess.df = rbind(loess.df, new)
+}
+```
+
+```{r, engine='bash', eval=F, echo=T}
+colors.clusters = rep('white', 7)
+colors.clusters[c(4,6)] = 'blue' # transient decrease
+colors.clusters[1] = 'cornflowerblue' #decrease-increase-decrease
+
+colors.clusters[c(3,7)] = 'red' #transient increase
+colors.clusters[5] = 'tomato3'  #gradual increase
+colors.clusters[2] = 'lightsalmon' #increase-decrease-increase
+```
+
+```{r, engine='bash', eval=F, echo=T}
+pdf(paste('Clusters_individual_loess','.pdf', sep=''), width=4, height=4)
+
+trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
+                box.rectangle = list( lwd=1.0, col="black", alpha = 1.0),
+                plot.symbol = list(col="black", lwd=1.0, pch ='.'))
+print(
+xyplot(ATAC ~  time, groups = cluster, data = loess.df, type = c('l'),#type = c('l','p'),
+       scales=list(x=list(cex=1.0,relation = "free", rot = 45), y =list(cex=1.0, relation="free")),
+       auto.key = T,
+       aspect=1.0,
+       between=list(y=0.5, x=0.5),
+       ylab = list(label = 'cluster loess of ATAC signal', cex =1.0),
+       xlab = list(label = 'Time (minutes)', cex =1.0),
+       par.settings = list(superpose.symbol = list(pch = c(16),
+                                                   col=colors.clusters, cex =0.5),
+                           strip.background=list(col="grey80"),
+                           superpose.line = list(col = colors.clusters, lwd=c(3),
+                                                 lty = c(1))))
+
+      )
+key=list(space="right",
+         lines=list(col=c("blue", "cornflowerblue", "red", "tomato3", "lightsalmon")), 
+         lty=c(3,2), 
+         lwd=6,
+         text=list(c("cluster1", "cluster4,6", "cluster3,7", "cluster5", "cluster2"))
+)
+
+
+dev.off()
+```
+
+![dynamic_cluster](images/Clusters_individual_loess.jpg)
+
+#### (2)plot all traces
+```{r, engine='bash', eval=F, echo=T}
+#this has a bwplot, loess curve, points, and lines, which can be removed from the panel function to customize
+# Local regression or local polynomial regression, also known as moving regression, is a generalization of the moving average and polynomial regression. Its most common methods, initially developed for scatterplot smoothing, are LOESS and LOWESS, both pronounced. 
+pdf(paste('Clusters_minc100_stringent_pvalue','.pdf', sep=''), width=11, height=15) 
+
+trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
+                box.rectangle = list( lwd=1.0, col="black", alpha = 1.0),
+                plot.symbol = list(col="black", lwd=1.0, pch ='.'))
+print(
+xyplot(value ~  sample.conditions | cluster, group = genes, data = plot.df, type = c('l'),#type = c('l','p'),
+       scales=list(x=list(cex=1.0,relation = "free", rot = 45), y =list(cex=1.0, relation="free")),
+       aspect=1.0,
+       between=list(y=0.5, x=0.5),
+       ylab = list(label = 'Normalized ATAC signal', cex =1.0),
+       xlab = list(label = 'Time (minutes)', cex =1.0),
+       par.settings = list(superpose.symbol = list(pch = c(16),
+                                                   col=c('grey20'), cex =0.5),
+                           strip.background=list(col="grey80"),
+                           superpose.line = list(col = c('#99999980'), lwd=c(1),
+                                                 lty = c(1))),
+       panel = function(x, y, ...) {
+           panel.xyplot(x, y, ...)
+           panel.bwplot(x, y, pch = '|', horizontal = FALSE, box.width = 15, do.out = FALSE)
+           panel.loess(x, y, ..., col = "blue", lwd =2.0,  span = 1/2, degree = 1, family = c("gaussian"))
+           
+})
+
+      )
+dev.off()
+```
+![dynamic_cluster](images/Clusters_minc100_stringent_pvalue.jpg)
+
+
+#### (3)plot dendrogram
+generate the dendrogram to confirm if we could merge some clusters
+
+```{r, engine='bash', eval=F, echo=T}
+library(data.table)
+x = as.data.table(plot.df)
+plot.df.cluster = dcast(x, genes + cluster ~ sample.conditions, value.var="value")
+
+avg.clusters = as.data.frame(matrix(nrow = 0, ncol = 4))
+for (i in unique(plot.df.cluster$cluster)) {
+    z = data.frame(matrix(colMeans(plot.df.cluster[plot.df.cluster$cluster == i,3:6]), 
+                            ncol = 4, nrow = 1))
+    rownames(z) = c(i)
+    colnames(z) = as.character(colnames(plot.df.cluster)[3:6])
+    avg.clusters = rbind(avg.clusters, z)
+}
+
+
+dd = dist(avg.clusters)
+hc = hclust(dd, method = "complete")
+
+pdf('dendrogram.pdf', width=8, height=5)
+plot(hc, xlab = "Clusters", main = ' ', hang = -1)
+abline(h = 1.5, lty = 2)
+dev.off()
+```
+
+![dynamic_cluster](images/dendrogram.jpg)
+
+#### (4)plot superclusters
+
+cluster3 & 7
+```{r, engine='bash', eval=F, echo=T}
+pdf(paste('Clusters_3_7','.pdf', sep=''), width=3.5, height=3.5, useDingbats =FALSE)
+
+trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
+                box.rectangle = list( lwd=1.0, col="black", alpha = 1.0),
+                plot.symbol = list(col="black", lwd=1.0, pch ='.'))
+print(
+    xyplot(value ~  sample.conditions , group = genes, data =
+                       plot.df[plot.df$cluster == 'cluster3' | 
+    plot.df$cluster == 'cluster7',]
+         , type = c('l'),#type = c('l','p'),
+       scales=list(x=list(cex=1.0,relation = "free", rot = 45), y =list(cex=1.0, relation="free")),
+       aspect=1.0,
+       between=list(y=0.5, x=0.5),
+       ylab = list(label = 'Normalized ATAC signal', cex =1.0),
+       xlab = list(label = 'Time (minutes)', cex =1.0),
+       par.settings = list(superpose.symbol = list(pch = c(16),
+                                                   col=c('grey20'), cex =0.5),
+                           strip.background=list(col="grey80"),
+                           superpose.line = list(col = c('#99999980'), lwd=c(1),
+                                                 lty = c(1))),
+       panel = function(x, y, ...) {
+           panel.xyplot(x, y, ...)
+           panel.bwplot(x, y, pch = '|', horizontal = FALSE, box.width = 15, do.out = FALSE)
+           panel.loess(x, y, ..., col = "blue", lwd =2.0,  span = 1/2, degree = 1, family = c("gaussian"))
+           
+})
+
+      )
+dev.off()
+```
+
+![dynamic_cluster](images/Clusters_3_7.jpg)
+
+cluster 4 & 6
+```{r, engine='bash', eval=F, echo=T}
+pdf(paste('Clusters_4_6','.pdf', sep=''), width=3.5, height=3.5, useDingbats =FALSE)
+
+trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
+                box.rectangle = list( lwd=1.0, col="black", alpha = 1.0),
+                plot.symbol = list(col="black", lwd=1.0, pch ='.'))
+print(
+    xyplot(value ~  sample.conditions , group = genes, data =
+                       plot.df[plot.df$cluster == 'cluster4' | 
+    plot.df$cluster == 'cluster6',]
+         , type = c('l'),#type = c('l','p'),
+       scales=list(x=list(cex=1.0,relation = "free", rot = 45), y =list(cex=1.0, relation="free")),
+       aspect=1.0,
+       between=list(y=0.5, x=0.5),
+       ylab = list(label = 'Normalized ATAC signal', cex =1.0),
+       xlab = list(label = 'Time (minutes)', cex =1.0),
+       par.settings = list(superpose.symbol = list(pch = c(16),
+                                                   col=c('grey20'), cex =0.5),
+                           strip.background=list(col="grey80"),
+                           superpose.line = list(col = c('#99999980'), lwd=c(1),
+                                                 lty = c(1))),
+       panel = function(x, y, ...) {
+           panel.xyplot(x, y, ...)
+           panel.bwplot(x, y, pch = '|', horizontal = FALSE, box.width = 15, do.out = FALSE)
+           panel.loess(x, y, ..., col = "blue", lwd =2.0,  span = 1/2, degree = 1, family = c("gaussian"))
+           
+})
+
+      )
+dev.off()
+```
+![dynamic_cluster](images/Clusters_4_6.jpg)
+#### (5)plot all superclusters
+
+```{r, engine='bash', eval=F, echo=T}
+pdf('atac_superclusters.pdf', width=6.83, height=5)
+
+trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
+                box.rectangle = list( lwd=1.0, col="black", alpha = 1.0),
+                plot.symbol = list(col="black", lwd=1.0, pch ='.'))
+print(
+xyplot(value ~  sample.conditions | supercluster, group = genes,
+       data = plot.df.atac, type = c('l'),#type = c('l','p'),
+       scales=list(x=list(cex=1.0,relation = "free", rot = 45),
+       y =list(cex=1.0, relation="free")),
+       aspect=1.0,
+       between=list(y=0.5, x=0.5),
+       layout = c(5,1),
+       ylab = list(label = 'Normalized ATAC signal', cex =1.0),
+       xlab = list(label = 'Time (minutes)', cex =1.0),
+       par.settings = list(superpose.symbol = list(pch = c(16),
+                                                   col=c('grey20'), cex =0.5),
+                           strip.background=list(col="grey80"),
+                           superpose.line = list(col = c('#99999980'), lwd=c(1),
+                                                 lty = c(1))),
+       panel = function(x, y, ...) {
+           panel.xyplot(x, y, ...)
+           panel.bwplot(x, y, pch = '|', horizontal = FALSE, box.width = 15,
+                            do.out = FALSE)
+           panel.spline(x, y, col = 'blue', lwd =2.0, ...) 
+           
+})
+
+      )
+dev.off()
+```
+![dynamic_cluster](images/atac_superclusters.jpg)
+down.up: cluster 4 & 6
+down.up.down: cluster 1
+gradual.up: cluster 5
+up.down: cluster 3 & 7
+up.down.up: cluster 2
+
+# Motif analysis
+## MEME motif enrichment analysis
+
+```{r, engine='bash', eval=F, echo=T}
+for (i in unique(plot.df$cluster)) {
+    print(i)
+    write.table(plot.df[plot.df$cluster == i,
+                        c('chr','start','end', 'value', 'cluster')][!duplicated(plot.df[plot.df$cluster == i,]$genes),],
+                file = paste0('cluster_bed_',
+                              gsub(" ", "", i, fixed = TRUE),'.bed'),
+                quote = FALSE, row.names = FALSE, col.names = FALSE, sep = '\t')
+}
+```
+
+### run MEME on each cluster.bed files to find enriched motifs
+
+running on Xanadu:
+
+```{r, engine='bash', eval=F, echo=T}
+wget https://hgdownload.soe.ucsc.edu/goldenPath/mm39/bigZips/mm39.chrom.sizes
+mkdir meme_motif_enrichment
+
+for i in *cluster*bed
+do
+    name=$(echo $i | awk -F"_" '{print $NF}' | awk -F".bed" '{print $1}')
+    echo $name
+    echo '#SBATCH -o' $name'.meme.out' > temp.txt
+    echo 'i='$i > temp2.txt
+    cat meme_slurm_header_1.txt temp.txt \
+        meme_slurm_header_2.txt temp2.txt \
+        meme_slurm_header_3.txt > $name.meme.sh
+    sbatch $name.meme.sh                                                                                                                                                           
+    rm temp.txt
+    rm temp2.txt
+done
+```
+
+(1)meme_slurm_header_1.txt
+
+```{r, engine='bash', eval=F, echo=T}
+#!/bin/bash
+
+#SBATCH --job-name=meme1        # name for job
+#SBATCH -N 1                    # number of nodes
+#SBATCH -n 1                    # number of jobs / tasks
+#SBATCH -c 48                    # number of cores
+#SBATCH --mem=128G                # RAM (memory) requested
+
+```
+
+(2)meme_slurm_header_2.txt
+
+```{r, engine='bash', eval=F, echo=T}
+#SBATCH -p general           # SLURM partition
+#SBATCH --qos=general        # SLURM Quality of service
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=ssun@uchc.edu
+#SBATCH -o scriptname.sh_%j.out
+#SBATCH -e scriptname.sh_%j.err
+
+hostname # have this at beginning of every script for  troubleshooting
+
+module purge
+
+module load gcc bedtools/2.26.0 meme/5.4.1
+```
+
+
+(3)meme_slurm_header_3.txt
+
+```{r, engine='bash', eval=F, echo=T}
+cd meme_motif_enrichment
+name=$(echo $i | awk -F"_" '{print $NF}' | awk -F".bed" '{print $1}')
+echo $name
+
+slopBed -i ../$i \
+        -g ../mm39.chrom.sizes -b -50 | \
+        fastaFromBed -fi ../mm39.fa \
+                     -bed stdin -fo ${name}.fasta
+head ${name}.fasta
+ meme -p 59 -oc ${name}.meme_output -nmotifs 15 \
+          -objfun classic -evt 0.01 -searchsize 0 -minw 6 \
+          -maxw 18 -revcomp -dna -markov_order 3 -maxsize 100000000  \
+          ${name}.fasta
+
+cd ..
+```
 
 
 
