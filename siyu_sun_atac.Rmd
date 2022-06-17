@@ -1260,5 +1260,549 @@ head ${name}.fasta
 cd ..
 ```
 
+### Prepare MEME databases
+#Generate homer_uniprobe_jaspar PSWM database
+```{r, engine='bash', eval=F, echo=T}
+wget http://meme-suite.org/meme-software/Databases/motifs/motif_databases.12.19.tgz
+tar -xzf motif_databases.12.19.tgz
+#JASPAR
+mv motif_databases/JASPAR/JASPAR2018_CORE_vertebrates_non-redundant.meme $PWD
+#Uniprobe
+mv motif_databases/MOUSE/uniprobe_mouse.meme $PWD
+
+#Homer
+#CAUTION: the HOMER_MEME_conversion.py was written for python2 so remember to specify python2.7 if you have python3 installed.
+wget https://raw.githubusercontent.com/mjg54/znf143_pro_seq_analysis/master/docs/HOMER_MEME_conversion.py
+wget http://homer.ucsd.edu/homer/custom.motifs
+python2.7 HOMER_MEME_conversion.py -i custom.motifs -o homer.motifs
+
+#edit databases to work with tomtom
+cp JASPAR2018_CORE_vertebrates_non-redundant.meme JASPAR_edited_meme.txt
+grep MOTIF JASPAR_edited_meme.txt > motifs.txt
+cat motifs.txt | while read motif
+do
+    name=$(echo $motif | awk -F" " '{print $NF}')
+    temp=$(echo 'MOTIF' $name'_jaspar')
+    echo $temp
+    sed -i "s;${motif};${temp};g" JASPAR_edited_meme.txt
+done
+rm motifs.txt
+
+#edit databases to work with tomtom
+cp uniprobe_mouse.meme uniprobe_edited_meme.txt
+grep MOTIF uniprobe_edited_meme.txt > motifs.txt
+cat motifs.txt | while read motif
+do
+    name=$(echo $motif | awk -F" " '{print $NF}')
+    temp=$(echo 'MOTIF' $name'_uniprobe')
+    echo $temp
+    sed -i "s;${motif};${temp};g" uniprobe_edited_meme.txt
+done
+#remove 'secondary' motifs
+sed -i -e '4210,8365d;' uniprobe_edited_meme.txt
+
+rm motifs.txt
+
+#edit databases to work with tomtom
+cp homer.motifs_meme.txt homer_edited_meme.txt
+grep MOTIF homer_edited_meme.txt > motifs.txt
+cat motifs.txt | while read motif
+do
+    name=$(echo $motif | awk -F" " '{print $NF}')
+    name=$(echo $name | awk -F"/" '{print $1}')
+    temp=$(echo 'MOTIF' $name'_homer')
+    echo $temp
+    sed -i "s;${motif};${temp};g" homer_edited_meme.txt
+done
+rm motifs.txt
+
+#Collect all database motifs into one file
+cat homer_edited_meme.txt \
+    uniprobe_edited_meme.txt JASPAR_edited_meme.txt > homer_uniprobe_jaspar_edited.txt
+```
+
+### Query MEME motifs in TOMTOM
+
+grouping_motif_families1.sh 
+```{r, engine='bash', eval=F, echo=T}
+#!/bin/bash
+
+#SBATCH --job-name=grouping_motif     # name for job
+#SBATCH -N 1                    # number of nodes 
+#SBATCH -n 1                    # number of jobs / tasks 
+#SBATCH -c 4                    # number of cores 
+#SBATCH -p general           # SLURM partition 
+#SBATCH --qos=general        # SLURM Quality of service 
+#SBATCH --mem=32G                # RAM (memory) requested 
+#SBATCH --mail-type=ALL 
+#SBATCH --mail-user=ssun@uchc.edu
+#SBATCH -o scriptname.sh_%j.out
+#SBATCH -e scriptname.sh_%j.err
+
+module purge
+module load gcc meme/5.4.1
+
+for i in *output/meme.txt
+do
+    name=$(echo $i | awk -F"/me" '{print $1}' | awk -F".meme" '{print $1}')
+    echo $name
+    tomtom -no-ssc -o $name.tomtom_output -verbosity 1 -min-overlap 5 -dist ed -evalue -thresh 0.05 $name.meme_output/meme.txt homer_uniprobe_jaspar_edited.txt
+    tomtom -no-ssc -o $name.tomtom_output -verbosity 1 -min-overlap 5 -dist ed -text -evalue -thresh 0.05 $name.meme_output/meme.txt homer_uniprobe_jaspar_edited.txt > $name.tomtom_output/tomtom.txt
+done
 
 
+mkdir motifid_clusters
+cd motifid_clusters
+
+echo 'Extracting Motif Names'
+for file in ../*tomtom_output/*.txt
+do
+    name=$(echo $file | awk -F"/" '{print $(NF-1)}' | awk -F".tomtom_output" '{print $1}')
+    echo $name
+    motifid=$name
+    #echo $file
+    linenum=$(awk 'END {print NR}' $file)
+    #echo $linenum
+    first=2
+    i=$first
+    if [[ $linenum != 5 ]]
+    then
+	mkdir $name
+	while [[  $i -le $linenum ]]
+	do
+	    head -$i $file | tail -1 > lastline
+	    mapid[$i]=$(awk 'END {print $2}' lastline | awk -F"(" '{print $1}')
+	    #echo mapid[$i]_${mapid[$i]}
+	    echo ${mapid[$i]} >> $name/motifidlist_$motifid.txt
+	    ((i = i + 1))
+	done
+	head -n $(( $(wc -l $name/motifidlist_$motifid.txt | awk '{print $1}') - 4 )) $name/motifidlist_$motifid.txt > $name/motifidlist_$motifid.final.txt
+	rm $name/motifidlist_$motifid.txt
+	mv $name/motifidlist_$motifid.final.txt $name/motifidlist_$motifid.txt
+    fi
+done
+rm lastline
+cat */motifidlist*txt > all_matched_motifs.txt
+mv all_matched_motifs.txt ..
+cd ..
+```
+
+
+## defining motif families
+
+### Query factors
+
+```{r, engine='bash', eval=F, echo=T}
+mkdir individual_memes
+#pulls each de novo motif from all the clusters and saves each as its own file
+
+#extract individual meme files from combined database
+#CAUTION: you only need to run this once, even if you're working through the code again
+cd individual_memes
+wget https://raw.githubusercontent.com/guertinlab/adipogenesis/master/motif_analysis/MEME_individual_from_db.py
+python2.7 MEME_individual_from_db.py -i ../homer_uniprobe_jaspar_edited.txt
+
+
+for file in *meme.txt 
+do
+    name=$(echo $file | awk -F"homer_uniprobe_jaspar_edited.txt_" '{print $1}')
+    mv $file ${name}meme.txt
+    
+done
+
+cd ..
+sort all_matched_motifs.txt | uniq -u > all_matched_motifs_uniq.txt
+
+
+
+#tomtom all query factors against all others
+mkdir tomtom_all_query_factors
+cd tomtom_all_query_factors
+
+cat ../all_matched_motifs_uniq.txt | while read factor
+do
+    echo $factor
+    cp ../individual_memes/${factor}_meme.txt $PWD
+done
+
+cat *meme.txt > ../all_query_factors_meme.txt
+
+module load gcc meme/5.4.1
+
+for meme in *meme.txt
+do
+    name=$(echo $meme | awk -F".txt_" '{print $NF}' | awk -F"_meme.txt" '{print $1}')
+    #echo $name
+    tomtom -no-ssc -o $name.tomtom_output -verbosity 1  -incomplete-scores -min-overlap 1 -dist ed -evalue -thresh 0.0005 $meme ../all_query_factors_meme.txt
+    cd $name.tomtom_output
+    cut -f1,2,5 tomtom.tsv | tail -n +2 | sed '$d' | sed '$d' | sed '$d' | sed '$d' >> ../3_col_combined_motif_db_pre.txt
+    cd ..
+done
+
+
+
+
+
+grep -v '#' 3_col_combined_motif_db_pre.txt > 3_col_combined_motif_db.txt
+rm 3_col_combined_motif_db_pre.txt
+cp 3_col_combined_motif_db.txt ..
+```
+
+### Visualize PSWM
+
+A position weight matrix (PWM), also known as a position-specific weight matrix (PSWM) or position-specific scoring matrix (PSSM), is a commonly used representation of motifs (patterns) in biological sequences.
+
+PWMs are often derived from a set of aligned sequences that are thought to be functionally related and have become an important part of many software tools for computational motif discovery.
+
+run this:
+https://raw.githubusercontent.com/guertinlab/adipogenesis/master/Pipeline_ATAC/4.2_visualize_pswms.R
+
+```{r}
+#install.packages("igraph")
+#install.packages("dichromat")
+library(igraph)
+library(dichromat)
+
+#setwd('/your/directory/to/3_col_combined_motif_db.txt')
+
+threecol=read.table("3_col_combined_motif_db.txt",header=F,stringsAsFactors = F,sep='\t')
+colnames(threecol)=c('from','to','e_value')
+threecol$weight=abs(log(threecol$e_value))
+
+#create the graph variable
+g=graph.data.frame(threecol,directed=F)
+g=simplify(g)
+
+cluster=clusters(g)
+
+for(i in 1:length(groups(cluster))) {
+write.table(groups(cluster)[i],file=paste0('PSWM_family_',i,'.txt'), 
+    col.names = F, row.names = F, quote = F, sep = '\t')
+}
+
+l=layout.fruchterman.reingold(g)
+l=layout.norm(l,-1,1,-1,1)
+
+colfunc<-colorRampPalette(c("red","yellow","springgreen","royalblue","purple")) # 9 families
+#pick a distinct color 
+mycol = colfunc(length(groups(cluster)))
+
+pdf(file='families.pdf',width=10,height=10)
+plot(g,layout=l,rescale=F,vertex.label.cex=.5,xlim=range(l[,1]),  ylim=range(l[,2]),
+edge.width=E(g)$weight/20,vertex.size=degree(g,mode='out')/5,
+edge.curved=T,vertex.label=NA,vertex.color=mycol[cluster$membership],
+margin=0,asp=0)
+dev.off()
+```
+
+
+## Generating composite motifs
+
+### Download required scripts
+```{r, engine='bash', eval=F, echo=T}
+#!/bin/bash
+
+wget https://raw.githubusercontent.com/guertinlab/adipogenesis/master/Pipeline_ATAC/misc_scripts/tomtom_output_to_composite.py
+wget https://github.com/guertinlab/atac_rotation/blob/main/generate_composite_motif.R
+
+wget https://raw.githubusercontent.com/guertinlab/adipogenesis/master/Pipeline_ATAC/misc_scripts/meme_header.txt
+```
+
+
+### Query TOMTOM to calculate index and values for PSWM
+```{r, engine='bash', eval=F, echo=T}
+#!/bin/bash
+
+mkdir composite_motifs
+cd composite_motifs
+
+#query tomtom for each factor against all others
+module purge
+module load gcc meme/5.4.1
+
+
+for txt in ../PSWM_family_*.txt
+do
+    dir_name=$(echo $txt | awk -F'../' '{print $2}' | awk -F'.txt' '{print $1}')
+    echo $dir_name
+    mkdir $dir_name
+    cd $dir_name
+    
+    cat ../$txt | while read line
+    do
+echo $line
+cp ../../individual_memes/${line}_meme.txt $PWD
+    done
+    echo ''
+    query_factor=`head -1 ../$txt`
+    if [[ $(wc -l < ../$txt) -ge 2 ]]
+    then   	
+cat ../$txt | { while read line
+do
+query_factor=$line
+rm ref_factors_meme.txt
+mv ${query_factor}_meme.txt ..
+cat *_meme.txt > ref_factors_meme.txt
+mv ../${query_factor}_meme.txt $PWD
+tomtom -no-ssc -o ${query_factor}.tomtom_output -verbosity 1 -incomplete-scores -min-overlap 1 -dist ed -evalue -thresh 0.0005 ${query_factor}_meme.txt ref_factors_meme.txt			    
+if [[ $(wc -l < ${query_factor}.tomtom_output/tomtom.tsv) -ge $max_motif ]]
+then
+max_motif=$(wc -l < ${query_factor}.tomtom_output/tomtom.tsv)
+final_query=$query_factor
+fi
+done
+echo FINAL_QUERY IS $final_query
+wc -l ${final_query}.tomtom_output/tomtom.tsv
+cd ${final_query}.tomtom_output
+python2.7 /home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/csite_minsite/tomtom_output_to_composite.py -i tomtom.xml
+mv tomtom.xml_test_index_pswm.txt ../composite.values.txt
+mv tomtom.xml_test_index_rc_offset.txt ../composite.index.txt
+cd ../..
+}
+fi
+    cd ..
+done
+
+```
+
+### Generate composite motif and sequence logo
+
+generate_composite_motif.R: the Rscript aligns and averages the PSWM of each motif to generate a composite motif.
+
+```{r}
+#!/bin/bash
+
+for family in PSWM*
+do
+    cd $family
+    num=$(ls *txt | wc -l)
+
+    if [[ $num -ge 2 ]]
+    then
+    
+    #generate composite PSWM
+	  module load gcc R/4.1.2
+    dr=$(pwd)	
+    Rscript ../../generate_composite_motif.R $family $dr
+    cat /home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/csite_minsite/meme_header.txt ${family}_composite_PSWM.txt > ${family}_meme.txt	
+    else
+    line=`grep MOTIF *meme.txt`
+    cp *meme.txt ${family}_meme.txt
+    sed -i "s;${line};MOTIF   Composite;g" ${family}_meme.txt
+    fi
+    
+    #generate logo
+    module load gcc meme/5.4.1
+    ceqlogo -i ${family}_meme.txt -m Composite -o ${family}.eps
+    ceqlogo -i ${family}_meme.txt -m Composite -o ${family}.rc.eps -r
+    cd ..
+    
+done
+
+
+cd ..
+module purge
+```
+
+
+### Genomic FIMO of the composite motif
+fimo_composites.sh
+```{r, engine='bash', eval=F, echo=T}
+#!/bin/bash
+
+#SBATCH --job-name=fimo_composites     # name for job
+#SBATCH -N 1                    # number of nodes 
+#SBATCH -n 1                    # number of jobs / tasks 
+#SBATCH -c 4                    # number of cores 
+#SBATCH -p general           # SLURM partition 
+#SBATCH --qos=general        # SLURM Quality of service 
+#SBATCH --mem=32G                # RAM (memory) requested 
+#SBATCH --mail-type=ALL 
+#SBATCH --mail-user=ssun@uchc.edu
+#SBATCH -o scriptname.sh_%j.out
+#SBATCH -e scriptname.sh_%j.err
+
+module load gcc meme/5.4.1
+
+mkdir fimo_composites
+
+for i in PSWM*txt
+do
+    name=$(echo $i | awk -F".txt" '{print $1}')
+    echo $name
+    
+    #run FIMO
+    cd fimo_composites
+    fimo --thresh 0.001 --text ../composite_motifs/$name/${name}_meme.txt \
+        /home/FCAM/ssun/motifanalysis/mm39.fa \
+        > ${name}_composite_fimo.txt
+
+    #this takes top 2M
+    score=$(tail -n +2 ${name}_composite_fimo.txt | sort -nrk6,6 | awk 'FNR == 2000000 {print $6}')
+    echo $score
+    tail -n +2 ${name}_composite_fimo.txt | awk -v sco="$score" '{ if ($6 >= sco) { print } }' | \
+        awk '{OFS="\t";} {print $2,$3,$4,$7,$6,$5,$8}' > ${name}_2M.txt
+
+    #this was to get the order of conformity to consensus.
+    tomtom -no-ssc -oc ${name}_ranks.tomtom_output -verbosity 1 -incomplete-scores -min-overlap 1 \
+        -dist ed -evalue -thresh 0.05 ../all_query_factors_meme.txt ${name}_composite_fimo.txt
+done
+```
+
+
+
+
+
+
+
+
+###############################################################################################
+### Generate composite motif and sequence logo
+
+generate_composite_motif.R: the Rscript aligns and averages the PSWM of each motif to generate a composite motif.
+
+
+### TOMTOM the composite to the database
+
+run tomtom on composite meme output
+
+```{r, engine='bash', eval=F, echo=T}
+#!/bin/bash
+
+module purge
+module load gcc meme/5.4.1
+
+mkdir composite_tomtom
+# tomtom to database
+
+for family in composite_motifs/PSWM*
+do
+    name=$(echo $family | awk -F"composite_motifs/PSWM_" '{print $NF}')
+    echo $name
+    tomtom -no-ssc -o composite_tomtom/$name.tomtom_output -verbosity 1 -min-overlap 5 -dist ed -evalue -thresh 0.05 composite_motifs/PSWM_${name}/*${name}_meme.txt homer_uniprobe_jaspar_edited.txt
+    tomtom -no-ssc -o composite_tomtom/$name.tomtom_output -verbosity 1 -min-overlap 5 -dist ed -text -evalue -thresh 0.05 composite_motifs/PSWM_${name}/*${name}_meme.txt homer_uniprobe_jaspar_edited.txt > composite_tomtom/$name.tomtom_output/tomtom.txt
+done
+```
+
+
+### Isolate the top database PSWM
+
+(1)extract motif names from tomtom output
+
+top_database_PSWM_motifs.txt
+```{r, engine='bash', eval=F, echo=T}
+# in /composite_tomtom
+# extract motif names from tomtom output
+mkdir motifid_top_PSWM
+cd motifid_top_PSWM
+
+echo 'Extracting Motif Names'
+for file in ../composite_tomtom/*family*tomtom_output/*.txt
+do
+    name=$(echo $file | awk -F"/" '{print $(NF-1)}' | awk -F".tomtom_output" '{print $1}')
+    echo $name
+    motifid=$name
+    #echo $file
+    linenum=$(awk 'END {print NR}' $file)
+    #echo $linenum
+    first=2
+    i=$first
+    if [[ $linenum != 5 ]]
+    then
+    mkdir $name
+    while [[  $i -le $linenum ]]
+    do
+        head -$i $file | tail -1 > lastline
+        mapid[$i]=$(awk 'END {print $2}' lastline | awk -F"(" '{print $1}')
+        #echo mapid[$i]_${mapid[$i]}
+        echo ${mapid[$i]} >> $name/motifidlist_$motifid.txt
+        ((i = i + 1))
+    done
+    head -n $(( $(wc -l $name/motifidlist_$motifid.txt | awk '{print $1}') - 4 )) \
+        $name/motifidlist_$motifid.txt > $name/motifidlist_$motifid.final.txt
+    rm $name/motifidlist_$motifid.txt
+    mv $name/motifidlist_$motifid.final.txt $name/motifidlist_$motifid.txt
+    fi
+done
+rm lastline
+
+cat *family/*.txt> top_database_PSWM_motifs.txt
+cp top_database_PSWM_motifs.txt ..
+sort top_database_PSWM_motifs.txt | uniq -u > top_database_PSWM_motifs_uniq.txt
+cp top_database_PSWM_motifs_uniq.txt ..
+cd ..
+```
+
+
+(2) extract individual meme files from combined database
+```{r, engine='bash', eval=F, echo=T}
+#!/bin/bash
+
+#tomtom all query factors against all others
+mkdir top_database_PSWM
+cd top_database_PSWM
+
+
+cat ../top_database_PSWM_motifs_uniq.txt | while read factor
+do
+    echo $factor
+    cp ../individual_memes/${factor}_meme.txt $PWD
+done
+
+cat *meme.txt > ../all_query_factors_meme_top.txt
+
+```
+
+
+### Genomic FIMO of the top database PSWM
+
+fimo_composites_top.sh
+
+```{r, engine='bash', eval=F, echo=T}
+#!/bin/bash
+
+#SBATCH --job-name=fimo_composites_top     # name for job
+#SBATCH -N 1                    # number of nodes 
+#SBATCH -n 1                    # number of jobs / tasks 
+#SBATCH -c 4                    # number of cores 
+#SBATCH -p general           # SLURM partition 
+#SBATCH --qos=general        # SLURM Quality of service 
+#SBATCH --mem=200G                # RAM (memory) requested 
+#SBATCH --mail-type=ALL 
+#SBATCH --mail-user=ssu n@uchc.edu
+#SBATCH -o scriptname.sh_%j.out
+#SBATCH -e scriptname.sh_%j.err
+
+module load gcc meme/5.4.1
+
+mkdir fimo_top_database_PSWM
+
+for i in top_database_PSWM/*_meme.txt
+do
+    name=$(echo $i | awk -F"top_database_PSWM/" '{print $NF}' | awk -F"_meme.txt" '{print $1}')
+    echo $name
+    
+    #run FIMO
+    cd fimo_top_database_PSWM
+    fimo --thresh 0.001 --text ../$i \
+        /home/FCAM/ssun/motifanalysis/mm39.fa \
+        > ${name}_fimo.txt
+
+    #this takes top 2M
+    score=$(tail -n +2 ${name}_fimo.txt | sort -nrk6,6 | awk 'FNR == 2000000 {print $6}')
+    echo $score
+    tail -n +2 ${name}_fimo.txt | awk -v sco="$score" '{ if ($6 >= sco) { print } }' | \
+        awk '{OFS="\t";} {print $2,$3,$4,$7,$6,$5,$8}' > ${name}_2M.txt
+
+    #this was to get the order of conformity to consensus.
+    tomtom -no-ssc -oc ${name}_ranks.tomtom_output -verbosity 1 -incomplete-scores -min-overlap 1 \
+        -dist ed -evalue -thresh 0.05 ../all_query_factors_meme.txt ${name}_fimo.txt
+done
+```
+
+### count the number/fraction of up, down, unchanged ATAC peaks (I would actually recommended doing this with all 7 clusters as well) with a genomic instance of the PSWM (a common error here is to count the number of motifs in the ATAC peaks, but if two motifs are in one peak, we only want to count +1, since the peak is said to have >= 1 motif).
+
+
+### Fisher or ChiSq test
+
+### Q: is a motif specific to clusters/group of clusters that share kinetic profiles?
