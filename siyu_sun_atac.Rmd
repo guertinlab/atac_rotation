@@ -797,6 +797,9 @@ sample.conditions = factor(sample.conditions, levels=c("t0","15min","30min","45m
 
 deseq.counts.table = DESeqDataSetFromMatrix(df.MAC, as.data.frame(sample.conditions), ~ sample.conditions)
 dds = DESeq(deseq.counts.table)
+
+normalized.counts = counts(dds, normalized=TRUE)
+save(normalized.counts,file='normalized.counts.atac.Rdata')
 ```
 
 ## PCA
@@ -929,9 +932,35 @@ write.table(cbind(plot.df$chr, plot.df$start, plot.df$end),
 ### nondynamic peaks
 ```{r, engine='bash', eval=F, echo=T}
 #Generate nondynamic peaks set for FIMO.
+not.different = rownames(res.lrt[res.lrt$padj > 0.5 & !is.na(res.lrt$padj) & !is.na(res.lrt$log2FoldChange) & abs(res.lrt$log2FoldChange) < 0.25,])
+#not.different = rownames(res.lrt[res.lrt$padj > 0.1 & !is.na(res.lrt$padj) & !is.na(res.lrt$baseMean) & res.lrt$baseMean > 10,])
+chr = sapply(strsplit(not.different, ':'), '[', 1)
+x = sapply(strsplit(not.different, ':'), '[', 2)
+start = sapply(strsplit(x, '-'), '[', 1)
+end = sapply(strsplit(x, '-'), '[', 2)
 
+curated.not.different = data.frame(chr,start,end)
+write.table(curated.not.different,file='nondynamic_peaks.bed',sep='\t',col.names=F,row.names=F,quote=F)
 
 ```
+
+### all.other peaks
+
+in xanadu:
+```{r, engine='bash', eval=F, echo=T}
+module load gcc bedtools  R
+
+#collect ATAC peaks that were not sorted into dynamic/nondynamic peaks
+intersectBed -v -a macrophage_summit_window.bed   #Only report those entries in A that have _no overlaps_ with B.
+		
+                -b *peaks.bed > all_other_peaks.bed #first three column
+```
+
+```{r, engine='bash', eval=F, echo=T}
+all_other<-unique(read.table("all_other_peaks.bed"))
+write.table(all_other[,1:3],file='allother_peaks.bed',sep='\t',col.names=F,row.names=F,quote=F)
+```
+
 
 ### plot
 
@@ -1455,7 +1484,7 @@ PWMs are often derived from a set of aligned sequences that are thought to be fu
 run this:
 https://raw.githubusercontent.com/guertinlab/adipogenesis/master/Pipeline_ATAC/4.2_visualize_pswms.R
 
-```{r}
+```{r, engine='bash', eval=F, echo=T}
 #install.packages("igraph")
 #install.packages("dichromat")
 library(igraph)
@@ -1868,6 +1897,7 @@ do
     echo $name
     intersectBed -loj -a ../dynamic_peaks.bed -b $i > ${name}_fimo.bed
     intersectBed -loj -a ../nondynamic_peaks.bed -b $i > ${name}_fimo_nondyn.bed
+    intersectBed -loj -a ../allother_peaks.bed -b $i > ${name}_fimo_allother.bed
     cat $i | cut -f1-3,5 | sort -k1,1 -k2,2n > ${name}_2M.bed 
 done
 ```
@@ -1924,17 +1954,6 @@ for(bed.file in Sys.glob(file.path('*_fimo.bed'))) {
 
 res = res[,-c(1:3)]
 
-#add in SP and KLF after separation
-#load('/scratch/bhn9by/ATAC/SP_KLF_split/sp.klf.scores.atac.Rdata')
-
-#x = sp.klf.scores.atac[,4:5]
-#colnames(x) = c('SP','KLF')
-
-#res = merge(res,x,by='row.names',all=TRUE)
-
-#rownames(res) = res[,1]
-#res = res[,-1]
-
 fimo.scores.atac = res
 save(fimo.scores.atac, file = 'fimo.scores.atac.Rdata')
 
@@ -1950,6 +1969,93 @@ for(i in 1:ncol(fimo.scores.atac)) {
         row.names=F,col.names=F,quote=F,sep='\t')
 }
 ```
+
+non-dynamic peaks as baseline
+
+```{r, engine='bash', eval=F, echo=T}
+# generate fimo.scores.nondyn.atac.Rdata
+res_c = unique(read.table('nondynamic_peaks.bed'))
+colnames(res_c) = c('chr', 'start', 'end')
+res_c$start = as.numeric(as.character(res_c$start))
+res_c$end = as.numeric(as.character(res_c$end))
+rownames(res_c) = paste0(res_c[,1], ':', res_c[,2], '-', res_c[,3])
+
+#main figure families
+
+for(bed.file in Sys.glob(file.path('nondyn.bed/*_fimo_nondyn.bed'))) {
+    
+    factor.name = strsplit(bed.file, "/")[[1]]
+    factor.name = strsplit(factor.name[length(factor.name)],
+                           '_fimo_nondyn.bed')[[1]][1]
+    print(factor.name)
+    x = read.table(bed.file, stringsAsFactors=FALSE)
+    x = x[x[,6] != -1,]   
+    y = aggregate(as.numeric(V8)~V1+V2+V3, data=x, FUN=sum)
+    colnames(y) = c('chr', 'start', 'end', factor.name)
+    rownames(y) = paste0(y[,1], ':', y[,2], '-', y[,3])
+    
+    func <- function(peak) {
+        if(peak %in% rownames(y)) {
+            return(y[rownames(y) == peak,ncol(y)])
+        } else {
+            return(NA)
+        }
+    }
+    
+    res_c[,ncol(res_c)+1] = sapply(rownames(res_c),func)
+    colnames(res_c)[ncol(res_c)] = factor.name
+
+}
+
+res_c = res_c[,-c(1:3)]
+
+fimo.scores.nondyn.atac = res_c
+save(fimo.scores.nondyn.atac, file = 'fimo.scores.nondyn.atac.Rdata')
+```
+
+all other peaks 
+
+```{r, engine='bash', eval=F, echo=T}
+# generate fimo.scores.all.other.atac.Rdata
+res_c = unique(read.table('allother_peaks.bed'))
+colnames(res_c) = c('chr', 'start', 'end')
+res_c$start = as.numeric(as.character(res_c$start))
+res_c$end = as.numeric(as.character(res_c$end))
+rownames(res_c) = paste0(res_c[,1], ':', res_c[,2], '-', res_c[,3])
+
+#main figure families
+
+for(bed.file in Sys.glob(file.path('all_other_bed2/*_fimo_allother.bed'))) {
+    
+    factor.name = strsplit(bed.file, "/")[[1]]
+    factor.name = strsplit(factor.name[length(factor.name)],
+                           '_fimo_allother.bed')[[1]][1]
+    print(factor.name)
+    x = read.table(bed.file, stringsAsFactors=FALSE)
+    x = x[x[,6] != -1,]   
+    y = aggregate(as.numeric(V8)~V1+V2+V3, data=x, FUN=sum)
+    colnames(y) = c('chr', 'start', 'end', factor.name)
+    rownames(y) = paste0(y[,1], ':', y[,2], '-', y[,3])
+    
+    func <- function(peak) {
+        if(peak %in% rownames(y)) {
+            return(y[rownames(y) == peak,ncol(y)])
+        } else {
+            return(NA)
+        }
+    }
+    
+    res_c[,ncol(res_c)+1] = sapply(rownames(res_c),func)
+    colnames(res_c)[ncol(res_c)] = factor.name
+
+}
+res_c = res_c[,-c(1:3)]
+
+fimo.scores.all.other.atac = res_c
+save(fimo.scores.all.other.atac, file = 'fimo.scores.all.other.atac.Rdata')
+```
+
+
 
 ```{r, engine='bash', eval=F, echo=T}
 plot.df = data.frame()
@@ -2588,3 +2694,113 @@ dev.off()
 ```
 
 ![traces](images/three_isolated_families_dynamic_accessibility.jpg)
+
+# Generating comprehensive ATAC dataframe
+
+```{r, engine='bash', eval=F, echo=T}
+load("fimo.scores.atac.Rdata") # contains increase or decreased peaks
+load("fimo.scores.nondyn.atac.Rdata") # contains unchanged peaks
+load('fimo.scores.all.other.atac.Rdata') # contains all other peaks
+load('plot.df.atac.Rdata') 
+
+plot.df = data.frame()
+for(i in 1:ncol(fimo.scores.atac)) {
+    temp = plot.df.atac[plot.df.atac$genes %in% rownames(fimo.scores.atac[!is.na(fimo.scores.atac[,i]),]),]
+    temp$family = colnames(fimo.scores.atac)[i]
+    plot.df = rbind(plot.df,temp)
+}
+
+plot.df$genes = as.factor(plot.df$genes)
+no.fam = rownames(fimo.scores.atac[which(rowSums(is.na(fimo.scores.atac)) == ncol(fimo.scores.atac)),])
+temp = plot.df.atac[plot.df.atac$genes %in% no.fam,]
+temp$family = 'No Family'
+
+plot.df = rbind(plot.df,temp)
+
+plot.df$status = 'Activated'
+plot.df[plot.df$supercluster == 'down.up' | plot.df$supercluster == 'down.up.down',]$status = 'Repressed'
+
+df1<-fimo.scores.nondyn.atac
+df1$genes<-rownames(df1)
+df1$chr = sapply(strsplit(df1$genes, ':|-'), '[', 1)
+df1$start = sapply(strsplit(df1$genes, ':|-'), '[', 2)
+df1$end = sapply(strsplit(df1$genes, ':|-'), '[', 3)
+df1$status<-"unchanged"
+
+df2<-fimo.scores.atac
+df2$genes<-rownames(df2)
+df2$chr = sapply(strsplit(df2$genes, ':|-'), '[', 1)
+df2$start = sapply(strsplit(df2$genes, ':|-'), '[', 2)
+df2$end = sapply(strsplit(df2$genes, ':|-'), '[', 3)
+label<-unique(plot.df[,c(16,18)])
+df2<-merge(df2,label,by="genes")
+df2[df2$status=="Activated",]$status="Gain Accessibility"
+df2[df2$status=="Repressed",]$status="Lose Accessibility"
+
+df3<-fimo.scores.all.other.atac
+df3$genes<-rownames(df3)
+df3$chr = sapply(strsplit(df3$genes, ':|-'), '[', 1)
+df3$start = sapply(strsplit(df3$genes, ':|-'), '[', 2)
+df3$end = sapply(strsplit(df3$genes, ':|-'), '[', 3)
+df3$status<-"all.other"
+
+fimo_scores_allpeaks<-rbind(df1,df2,df3)
+save(fimo_scores_allpeaks, file = 'fimo.scores.allpeaks.atac.Rdata')
+```
+
+```{r, engine='bash', eval=F, echo=T}
+load('fimo.scores.allpeaks.atac.Rdata')
+df = data.frame(fimo_scores_allpeaks)
+```
+
+add counts
+```{r, engine='bash', eval=F, echo=T}
+# add counts
+load('normalized.counts.atac.Rdata')
+zero.min = c()
+fifteen.min = c()
+thirty.min = c()
+fourtyfive.min = c()
+
+genes = c()
+
+print('Getting ATAC means')
+for (i in 1:nrow(normalized.counts)) {
+    zero.min = append(zero.min, mean(normalized.counts[i,13:16]))
+    fifteen.min = append(fifteen.min, mean(normalized.counts[i,1:4]))
+    thirty.min = append(thirty.min, mean(normalized.counts[i,5:8]))
+    fourtyfive.min = append(fourtyfive.min, mean(normalized.counts[i,9:12]))
+    
+    genes = append(genes,rownames(normalized.counts)[i])
+}
+
+atac.means = data.frame(row.names = genes, 
+                        min.0 = zero.min, 
+                        min.15 = fifteen.min,
+                        min.30 = thirty.min, 
+                        min.45 = fourtyfive.min)
+
+save(atac.means,file='atac.means.Rdata')
+
+atac.means$genes<-rownames(atac.means)
+df = merge(df, atac.means, by='genes')
+```
+
+add cluster information
+```{r, engine='bash', eval=F, echo=T}
+# add cluster information
+# down.up: cluster 4 & 6
+# down.up.down: cluster 1
+# gradual.up: cluster 5
+# up.down: cluster 3 & 7
+# up.down.up: cluster 2
+
+cluster.df = unique(plot.df.atac[,c(5,15,16)])
+
+df = merge(df,cluster.df,by='genes', all=T)
+
+#rownames(df) = df[,1]
+#df = df[,-1]
+
+save(df,file='atac.comprehensive.Rdata')
+```
