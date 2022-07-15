@@ -1161,6 +1161,61 @@ dev.off()
 #### (5)plot all superclusters
 
 ```{r, engine='bash', eval=F, echo=T}
+# increase dynamics:
+gradual.up = plot.df[plot.df$cluster == 'cluster5',]
+
+up.down = plot.df[plot.df$cluster == 'cluster3' |
+                    plot.df$cluster == 'cluster7' ,]
+
+up.down.up = plot.df[plot.df$cluster == 'cluster2',]
+
+#decrease dynamics:
+
+down.up = plot.df[plot.df$cluster == 'cluster4'|
+                    plot.df$cluster == 'cluster6',]
+
+down.up.down = plot.df[plot.df$cluster == 'cluster1',]
+
+
+gradual.up$supercluster = 'gradual.up'
+up.down$supercluster = 'up.down'
+up.down.up$supercluster = 'up.down.up'
+down.up$supercluster = 'down.up'
+down.up.down$supercluster = 'down.up.down'
+
+
+plot.df.atac = rbind(gradual.up,
+      up.down,
+      up.down.up,
+      down.up,
+      down.up.down)
+
+
+plot.df.atac = plot.df.atac[,2:16]
+plot.df.atac$genes = paste0(plot.df.atac$chr,':',plot.df.atac$start,'-',plot.df.atac$end)
+save(plot.df.atac,file='plot.df.atac.Rdata')
+
+```
+
+```{r, engine='bash', eval=F, echo=T}
+plot.df.atac$genes = as.factor(plot.df.atac$genes)
+cat.colours = plot.df.atac[plot.df.atac$merge == 'one_groupt0',]
+cat.colours$genes <- as.factor(cat.colours$genes)
+cat.colours$supercluster <- as.factor(cat.colours$supercluster)
+
+cat.colours$colour[cat.colours$supercluster == 'up.down.up'] <- '#FF000008'
+cat.colours$colour[cat.colours$supercluster == 'up.down'] <- '#FF000008'
+cat.colours$colour[cat.colours$supercluster == 'gradual.up'] <- '#FF000008'
+cat.colours$colour[cat.colours$supercluster == 'down.up.down'] <- '#0000FF08'
+cat.colours$colour[cat.colours$supercluster == 'down.up'] <- '#0000FF08'
+
+cat.colours$colour <- as.factor(cat.colours$colour)
+
+cat.colours <- cat.colours[match(levels(plot.df.atac$genes), cat.colours$genes), ]
+```
+
+
+```{r, engine='bash', eval=F, echo=T}
 pdf('atac_superclusters.pdf', width=6.83, height=5)
 
 trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
@@ -1179,20 +1234,20 @@ xyplot(value ~  sample.conditions | supercluster, group = genes,
        par.settings = list(superpose.symbol = list(pch = c(16),
                                                    col=c('grey20'), cex =0.5),
                            strip.background=list(col="grey80"),
-                           superpose.line = list(col = c('#99999980'), lwd=c(1),
+                           superpose.line = list(col = as.character(cat.colours$colour), lwd=c(1),
                                                  lty = c(1))),
        panel = function(x, y, ...) {
            panel.xyplot(x, y, ...)
            panel.bwplot(x, y, pch = '|', horizontal = FALSE, box.width = 15,
-                            do.out = FALSE)
-           panel.spline(x, y, col = 'blue', lwd =2.0, ...) 
+                           do.out = FALSE)
+           panel.spline(x, y, col = 'black', lwd =2.0, ...) 
            
 })
 
       )
 dev.off()
 ```
-![dynamic_cluster](images/atac_superclusters.jpg)
+![dynamic_cluster](images/new_atac_superclusters.jpg)
 down.up: cluster 4 & 6
 down.up.down: cluster 1
 gradual.up: cluster 5
@@ -1879,13 +1934,11 @@ done
 
 ![seqlogo](images/seqlogos.jpg)
 
-# motif analysis visualization
+# Generating comprehensive ATAC dataframe
 
-### count the number/fraction of up, down, unchanged ATAC peaks with a genomic instance of the PSWM 
-
-Non-dynamic: padj > 0.5 & log2FoldChange < 0.25 \
+Non-dynamic peaks: padj > 0.5 & log2FoldChange < 0.25 \
 N=49111 \
-Dynamic: padj <= 0.045 \
+Dynamic peaks: padj <= 0.045 \
 N=34056 \
 
 ```{r, engine='bash', eval=F, echo=T}
@@ -1970,7 +2023,7 @@ for(i in 1:ncol(fimo.scores.atac)) {
 }
 ```
 
-non-dynamic peaks as baseline
+non-dynamic peaks as baseline \
 
 ```{r, engine='bash', eval=F, echo=T}
 # generate fimo.scores.nondyn.atac.Rdata
@@ -2013,7 +2066,7 @@ fimo.scores.nondyn.atac = res_c
 save(fimo.scores.nondyn.atac, file = 'fimo.scores.nondyn.atac.Rdata')
 ```
 
-all other peaks 
+all other peaks \
 
 ```{r, engine='bash', eval=F, echo=T}
 # generate fimo.scores.all.other.atac.Rdata
@@ -2073,48 +2126,208 @@ plot.df = rbind(plot.df,temp)
 
 plot.df$status = 'Activated'
 plot.df[plot.df$supercluster == 'down.up' | plot.df$supercluster == 'down.up.down',]$status = 'Repressed'
-activated = table(plot.df[plot.df$status == 'Activated',]$family) / 4 #4 conditions
-repressed = table(plot.df[plot.df$status == 'Repressed',]$family) / 4
+```
 
+### add status info 
+
+```{r, engine='bash', eval=F, echo=T}
+load("fimo.scores.atac.Rdata") # contains increase or decreased peaks
+load("fimo.scores.nondyn.atac.Rdata") # contains unchanged peaks
+load('fimo.scores.all.other.atac.Rdata') # contains all other peaks
+load('plot.df.atac.Rdata') 
+
+plot.df = data.frame()
+for(i in 1:ncol(fimo.scores.atac)) {
+    temp = plot.df.atac[plot.df.atac$genes %in% rownames(fimo.scores.atac[!is.na(fimo.scores.atac[,i]),]),]
+    temp$family = colnames(fimo.scores.atac)[i]
+    plot.df = rbind(plot.df,temp)
+}
+
+plot.df$genes = as.factor(plot.df$genes)
+no.fam = rownames(fimo.scores.atac[which(rowSums(is.na(fimo.scores.atac)) == ncol(fimo.scores.atac)),])
+temp = plot.df.atac[plot.df.atac$genes %in% no.fam,]
+temp$family = 'No Family'
+
+plot.df = rbind(plot.df,temp)
+
+plot.df$status = 'Activated'
+plot.df[plot.df$supercluster == 'down.up' | plot.df$supercluster == 'down.up.down',]$status = 'Repressed'
+
+df1<-fimo.scores.nondyn.atac
+df1$genes<-rownames(df1)
+df1$chr = sapply(strsplit(df1$genes, ':|-'), '[', 1)
+df1$start = sapply(strsplit(df1$genes, ':|-'), '[', 2)
+df1$end = sapply(strsplit(df1$genes, ':|-'), '[', 3)
+df1$status<-"unchanged"
+
+df2<-fimo.scores.atac
+df2$genes<-rownames(df2)
+df2$chr = sapply(strsplit(df2$genes, ':|-'), '[', 1)
+df2$start = sapply(strsplit(df2$genes, ':|-'), '[', 2)
+df2$end = sapply(strsplit(df2$genes, ':|-'), '[', 3)
+label<-unique(plot.df[,c(16,18)])
+df2<-merge(df2,label,by="genes")
+df2[df2$status=="Activated",]$status="Gain Accessibility"
+df2[df2$status=="Repressed",]$status="Lose Accessibility"
+
+df3<-fimo.scores.all.other.atac
+df3$genes<-rownames(df3)
+df3$chr = sapply(strsplit(df3$genes, ':|-'), '[', 1)
+df3$start = sapply(strsplit(df3$genes, ':|-'), '[', 2)
+df3$end = sapply(strsplit(df3$genes, ':|-'), '[', 3)
+df3$status<-"all.other"
+
+fimo_scores_allpeaks<-rbind(df1,df2,df3)
+save(fimo_scores_allpeaks, file = 'fimo.scores.allpeaks.atac.Rdata')
 ```
 
 ```{r, engine='bash', eval=F, echo=T}
-df = data.frame(names = c(names(activated),names(repressed)),
-                num = c(as.vector(activated),as.vector(repressed)),
-                cond = c(rep('Activated',length(activated)),rep('Repressed',length(repressed))),
-                index = rep(as.vector(table(plot.df$family)),2))
+load('fimo.scores.allpeaks.atac.Rdata')
+df = data.frame(fimo_scores_allpeaks)
+```
+
+### add counts
+```{r, engine='bash', eval=F, echo=T}
+# add counts
+load('normalized.counts.atac.Rdata')
+zero.min = c()
+fifteen.min = c()
+thirty.min = c()
+fourtyfive.min = c()
+
+genes = c()
+
+print('Getting ATAC means')
+for (i in 1:nrow(normalized.counts)) {
+    zero.min = append(zero.min, mean(normalized.counts[i,13:16]))
+    fifteen.min = append(fifteen.min, mean(normalized.counts[i,1:4]))
+    thirty.min = append(thirty.min, mean(normalized.counts[i,5:8]))
+    fourtyfive.min = append(fourtyfive.min, mean(normalized.counts[i,9:12]))
+    
+    genes = append(genes,rownames(normalized.counts)[i])
+}
+
+atac.means = data.frame(row.names = genes, 
+                        min.0 = zero.min, 
+                        min.15 = fifteen.min,
+                        min.30 = thirty.min, 
+                        min.45 = fourtyfive.min)
+
+save(atac.means,file='atac.means.Rdata')
+
+atac.means$genes<-rownames(atac.means)
+df = merge(df, atac.means, by='genes')
+```
+
+### add cluster info
+```{r, engine='bash', eval=F, echo=T}
+# add cluster information
+# down.up: cluster 4 & 6
+# down.up.down: cluster 1
+# gradual.up: cluster 5
+# up.down: cluster 3 & 7
+# up.down.up: cluster 2
+
+cluster.df = unique(plot.df.atac[,c(5,15,16)])
+
+df = merge(df,cluster.df,by='genes', all=T)
+
+#rownames(df) = df[,1]
+#df = df[,-1]
+
+atac.comprehensive =df
+save(atac.comprehensive,file='atac.comprehensive.Rdata')
+```
+
+
+# motif analysis visualization
+
+### prepare data
+```{r, engine='bash', eval=F, echo=T}
+load("fimo.scores.atac.Rdata") # contains increase or decreased peaks
+load("fimo.scores.nondyn.atac.Rdata") # contains unchanged peaks
+load('fimo.scores.all.other.atac.Rdata') # contains all other peaks
+load('plot.df.atac.Rdata') 
+
+plot.df = data.frame()
+for(i in 1:ncol(fimo.scores.atac)) {
+    temp = plot.df.atac[plot.df.atac$genes %in% rownames(fimo.scores.atac[!is.na(fimo.scores.atac[,i]),]),]
+    temp$family = colnames(fimo.scores.atac)[i]
+    plot.df = rbind(plot.df,temp)
+}
+
+plot.df$genes = as.factor(plot.df$genes)
+no.fam = rownames(fimo.scores.atac[which(rowSums(is.na(fimo.scores.atac)) == ncol(fimo.scores.atac)),])
+temp = plot.df.atac[plot.df.atac$genes %in% no.fam,]
+temp$family = 'No Family'
+
+plot.df = rbind(plot.df,temp)
+
+plot.df$status = 'Activated'
+plot.df[plot.df$supercluster == 'down.up' | plot.df$supercluster == 'down.up.down',]$status = 'Repressed'
+```
+
+```{r, engine='bash', eval=F, echo=T}
+plot.df1=unique(plot.df[,c(5,15:18)])
+```
+
+
+```{r, engine='bash', eval=F, echo=T}
+plot.df2 = data.frame()
+for(i in 1:ncol(fimo.scores.nondyn.atac)) {
+    
+     temp=fimo.scores.nondyn.atac[!is.na(fimo.scores.nondyn.atac[,i]),]
+     temp$family=colnames(fimo.scores.nondyn.atac)[i]
+     temp$genes=rownames(temp)
+     plot.df2 = rbind(plot.df2,temp[,10:11])
+}
+
+plot.df2$genes = as.factor(plot.df2$genes)
+no.fam = rownames(fimo.scores.nondyn.atac[which(rowSums(is.na(fimo.scores.nondyn.atac)) == ncol(fimo.scores.nondyn.atac)),])
+temp = data.frame(no.fam)
+colnames(temp)="genes"
+temp$family = 'No Family'
+
+plot.df2 = rbind(plot.df2,temp)
+
+plot.df2$status = 'unchanged'
+plot.df2$cluster = 'unchanged'
+plot.df2$supercluster = 'unchanged'
+```
+
+```{r, engine='bash', eval=F, echo=T}
+plot.df.sum=rbind(plot.df1, plot.df2)
+plot.df.sum[plot.df.sum$status=="Activated",]$status="Gain Accessibility"
+plot.df.sum[plot.df.sum$status=="Repressed",]$status="Lose Accessibility"
+```
+
+
+raw counts
+```{r, engine='bash', eval=F, echo=T}
+activated = table(plot.df.sum[plot.df.sum$status == 'Gain Accessibility',]$family) 
+repressed = table(plot.df.sum[plot.df.sum$status == 'Lose Accessibility',]$family) 
+unchanged = table(plot.df.sum[plot.df.sum$status == 'unchanged',]$family) 
+
+df = data.frame(names = c(names(activated),names(repressed), names(unchanged)),
+                num = c(as.vector(activated),as.vector(repressed), as.vector(unchanged)),
+                cond = c(rep('Gain Accessibility',length(activated)),rep('Lose Accessibility',length(repressed)),rep('unchanged',length(unchanged))),
+                index = rep(as.vector(table(plot.df$family)),3))
 df[df$names == 'No Family',]$index = min(df$index) - 1
 ```
 
+add fraction
 ```{r, engine='bash', eval=F, echo=T}
-df3<-df
-df3$fraction=c(df3[df3$cond=="Activated",]$num/length(unique(plot.df[plot.df$status=="Activated",]$genes)), df3[df3$cond=="Repressed",]$num/length(unique(plot.df[plot.df$status=="Repressed",]$genes)))
-df3$fraction<-(df3$fraction)*100
+df_sum<-df
+df_sum$fraction=c(df_sum[df_sum$cond=="Gain Accessibility",]$num/length(unique(plot.df.sum[plot.df.sum$status=="Gain Accessibility",]$genes)), df_sum[df_sum$cond=="Lose Accessibility",]$num/length(unique(plot.df.sum[plot.df.sum$status=="Lose Accessibility",]$genes)), df_sum[df_sum$cond=="unchanged",]$num/length(unique(plot.df.sum[plot.df.sum$status=="unchanged",]$genes)))
+df_sum$fraction<-(df_sum$fraction)*100
 ```
 
 
-```{r, engine='bash', eval=F, echo=T}
-df4<-as.data.frame(colSums(!is.na(fimo.scores.nondyn.atac)))
-df4$names<-rownames(df4)
-colnames(df4)<-c("num", "names")
-df4$cond<-"no diff"
-df4$fraction<-(df4$num/nrow(fimo.scores.nondyn.atac))*100
-temp<-t(as.data.frame(c(length(no.fam2), "No Family", "no diff",(length(no.fam2)/nrow(fimo.scores.nondyn.atac))*100 )))
-colnames(temp)<-c("num","names","cond","fraction")
-df4<-rbind(temp, df4)
-```
+
+### count the number/fraction of up, down, unchanged ATAC peaks with a genomic instance of the PSWM 
 
 
-```{r, engine='bash', eval=F, echo=T}
-df_sum<-rbind(df4, df3[, c(2,1,3,5)])
-df_sum[df_sum$cond=="Activated",]$cond="Gain Accessibility"
-df_sum[df_sum$cond=="Repressed",]$cond="Lose Accessibility"
-df_sum$names<-as.character(df_sum$names)
-df_sum$cond<-as.character(df_sum$cond)
-df_sum$num<-as.numeric(df_sum$num)
-df_sum$fraction<-as.numeric(df_sum$fraction)
-rownames(df_sum)<-c(1:30)
-```
+(1) plot number of peaks in each motif family
 
 ```{r, engine='bash', eval=F, echo=T}
 pdf(file="percent of each motif family occurrance.pdf",width=8,height=5)
@@ -2139,6 +2352,8 @@ dev.off()
 ```
 
 ![motif_occurance](images/percent.of.each.motif.family.occurrance.jpg)
+(2) plot number of peaks in each motif family (by cluster) \
+
 
 ### ChiSq test
 
@@ -2147,12 +2362,12 @@ fimo.scores.atac1<-fimo.scores.atac
 fimo.scores.atac1$genes<-rownames(fimo.scores.atac1)
 
 #increased peaks
-Increased_peaks<-as.data.frame(unique(plot.df[plot.df$status=="Activated",]$genes)) 
+Increased_peaks<-as.data.frame(unique(plot.df.sum[plot.df.sum$status=="Gain Accessibility",]$genes)) 
 colnames(Increased_peaks)<-"genes"
 Increased_peaks<-merge(fimo.scores.atac1, Increased_peaks, by="genes")
 
 #decreased peaks
-Decreased_peaks<-as.data.frame(unique(plot.df[plot.df$status=="Repressed",]$genes)) 
+Decreased_peaks<-as.data.frame(unique(plot.df.sum[plot.df.sum$status=="Lose Accessibility",]$genes)) 
 colnames(Decreased_peaks)<-"genes"
 Decreased_peaks<-merge(fimo.scores.atac1, Decreased_peaks, by="genes")
 
@@ -2160,7 +2375,6 @@ Decreased_peaks<-merge(fimo.scores.atac1, Decreased_peaks, by="genes")
 unchanged_peaks<-fimo.scores.nondyn.atac
 unchanged_peaks$genes<-rownames(fimo.scores.nondyn.atac)
 ```
-
 
 ```{r, engine='bash', eval=F, echo=T}
 df_sum_withfam <-matrix(ncol=3, nrow=9)
@@ -2171,7 +2385,7 @@ for (i in 1:9){
 }
 df_sum_withfam<-as.data.frame(df_sum_withfam)
 rownames(df_sum_withfam)<-c(colnames(unchanged_peaks)[1:9])
-colnames(df_sum_withfam)<-c("unchanged","increased", "decreased")
+colnames(df_sum_withfam)<-c("unchanged","Gain Accessibility", "Lose Accessibility")
 
 #no CRE
 df_sum_nofam <-matrix(ncol=3, nrow=9)
@@ -2183,35 +2397,37 @@ for (j in 1:9){
 
 df_sum_nofam<-as.data.frame(df_sum_nofam)
 rownames(df_sum_nofam)<-c("no CRE", "no ETV1","no Egr1","no Fosl2","no KLF13","no Klf4","no NFYB", "no RREB1", "no Ronin")
-colnames(df_sum_nofam)<-c("unchanged","increased", "decreased")
+colnames(df_sum_nofam)<-c("unchanged","Gain Accessibility", "Lose Accessibility")
 
-```
-
-```{r, engine='bash', eval=F, echo=T}
 df_sum2<-rbind(df_sum_nofam, df_sum_withfam)
-df_sum2_fraction<-df_sum2
-df_sum2_fraction$unchanged<-100*df_sum2_fraction$unchanged/nrow(unchanged_peaks)
-df_sum2_fraction$increased<-100*df_sum2_fraction$increased/nrow(Increased_peaks)
-df_sum2_fraction$decreased<-100*df_sum2_fraction$decreased/nrow(Decreased_peaks)
 ```
+
 
 ```{r, engine='bash', eval=F, echo=T}
 chidata = data.frame(matrix(ncol = 5, nrow = 9))
 for (i in 1:9){
   chidata$fam_vs_no_spe_fam[i]<-as.character(rownames(df_sum2)[i+9])
-  chidata$Gain_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),1:2], correct=F)$statistic
+  #chidata$Gain_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),1:2], correct=F)$statistic
   chidata$Gain_p_value[i]<-chisq.test(df_sum2[c(i,i+9),1:2], correct=F)$p.value
-  chidata$lose_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),1:3], correct=F)$statistic
+  #chidata$lose_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),1:3], correct=F)$statistic
   chidata$lose_p_value[i]<-chisq.test(df_sum2[c(i,i+9),1:3], correct=F)$p.value
+  #chidata$lose_Gain_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),2:3], correct=F)$statistic
+  chidata$lose_Gain_p_value[i]<-chisq.test(df_sum2[c(i,i+9),2:3], correct=F)$p.value
+  
 }
-chidata_3=chidata_3[, 6:10]
+chidata_p<-chidata[order(chidata$lose_Gain_p_value),][,6:9]
 ```
 
-![chisq_test](images/chidata.jpg)
+![chisq_test](images/chidata2.jpg)
 
-
+### bar plot
 
 ```{r, engine='bash', eval=F, echo=T}
+df_sum2_fraction<-df_sum2
+df_sum2_fraction$`Gain Accessibility`<-100*df_sum2_fraction$`Gain Accessibility`/nrow(Increased_peaks)
+df_sum2_fraction$unchanged<-100*df_sum2_fraction$unchanged/nrow(unchanged_peaks)
+df_sum2_fraction$`Lose Accessibility`<-100*df_sum2_fraction$`Lose Accessibility`/nrow(Decreased_peaks)
+
 library("reshape")
 df_sum2_fraction_mut<-df_sum2_fraction
 df_sum2_fraction_mut$family<-rownames(df_sum2_fraction)
@@ -2219,91 +2435,104 @@ df_sum2_fraction_mut<-melt(df_sum2_fraction_mut,
                            id.vars="family",
                            variable.name="class",
                            value.name="fraction")
+
+df_sum2_fraction_mut$variable <- factor(df_sum2_fraction_mut$variable, levels = c('Gain Accessibility', 'unchanged', 'Lose Accessibility'))
 ```
 
 ```{r, engine='bash', eval=F, echo=T}
-#library(ggplot2)
+library(ggplot2)
 
 plot_cre<-ggplot(df_sum2_fraction_mut[c(1,10,19,28,37,46),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without CRE motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without CRE', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("red","blue")) +
+        theme(axis.text.x=element_text(angle=45, hjust=0.9))
 
 plot_etv1<-ggplot(df_sum2_fraction_mut[c(2,11,20,29,38,47),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without ETV1 motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without ETV1', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+
 plot_Egr1<-ggplot(df_sum2_fraction_mut[c(3,12,21,30,39,48),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without Egr1 motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without Egr1', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
 
 plot_Fosl2<-ggplot(df_sum2_fraction_mut[c(4,13,22,31,40,49),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without Fosl2 motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without Fosl2 ', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
 
 
 plot_KLF13<-ggplot(df_sum2_fraction_mut[c(5,14,23,32,41,50),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without KLF13 motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without KLF13', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
 
 plot_Klf4<-ggplot(df_sum2_fraction_mut[c(6,15,24,33,42,51),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without Klf4 motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without Klf4', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
 
 plot_NFYB<-ggplot(df_sum2_fraction_mut[c(7,16,25,34,43,52),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without NFYB motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without NFYB', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
 
 plot_RREB1<-ggplot(df_sum2_fraction_mut[c(8,17,26,35,44,53),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without RREB1 motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without RREB1', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("blue","red")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
 
 plot_Ronin<-ggplot(df_sum2_fraction_mut[c(9,18,27,36,45,54),],aes(x =variable ,y = value, fill=family)) +
         geom_bar(stat='identity',position='stack',color='black') +
         
-        labs(title = 'Proportions of peaks with or without Ronin motif', y = '% of Peaks', x = NULL, fill = NULL) +
+        labs(title = 'Proportions of peaks with or without Ronin', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("red","blue"))
+        scale_fill_manual(values = c("blue","red")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
 
 ```
 
@@ -2326,6 +2555,220 @@ dev.off()
 ```
 
 ![peak_proportion](images/peak_proportion-with_or_without_motif.jpg)
+
+### bar plot by cluster
+
+
+```{r, engine='bash', eval=F, echo=T}
+fimo.scores.atac1<-fimo.scores.atac
+fimo.scores.atac1$genes<-rownames(fimo.scores.atac1)
+
+# down.up: cluster 4 & 6
+down.up_peaks<-as.data.frame(unique(plot.df.sum[plot.df.sum$supercluster=="down.up",]$genes)) 
+colnames(down.up_peaks)<-"genes"
+down.up_peaks<-merge(fimo.scores.atac1, down.up_peaks, by="genes")
+
+# down.up.down: cluster 1
+down.up.down_peaks<-as.data.frame(unique(plot.df.sum[plot.df.sum$supercluster=="down.up.down",]$genes)) 
+colnames(down.up.down_peaks)<-"genes"
+down.up.down_peaks<-merge(fimo.scores.atac1, down.up.down_peaks, by="genes")
+
+# gradual.up: cluster 5
+gradual.up_peaks<-as.data.frame(unique(plot.df.sum[plot.df.sum$supercluster=="gradual.up",]$genes)) 
+colnames(gradual.up_peaks)<-"genes"
+gradual.up_peaks<-merge(fimo.scores.atac1, gradual.up_peaks, by="genes")
+
+# up.down: cluster 3 & 7
+up.down_peaks<-as.data.frame(unique(plot.df.sum[plot.df.sum$supercluster=="up.down",]$genes)) 
+colnames(up.down_peaks)<-"genes"
+up.down_peaks<-merge(fimo.scores.atac1, up.down_peaks, by="genes")
+
+# up.down.up: cluster 2
+up.down.up_peaks<-as.data.frame(unique(plot.df.sum[plot.df.sum$supercluster=="up.down.up",]$genes)) 
+colnames(up.down.up_peaks)<-"genes"
+up.down.up_peaks<-merge(fimo.scores.atac1, up.down.up_peaks, by="genes")
+
+#unchanged peaks
+unchanged_peaks<-fimo.scores.nondyn.atac
+unchanged_peaks$genes<-rownames(fimo.scores.nondyn.atac)
+```
+
+```{r, engine='bash', eval=F, echo=T}
+df_sum_withfam <-matrix(ncol=6, nrow=9)
+for (i in 1:9){
+  df_sum_withfam[i,1]<- as.numeric(table(is.na(unchanged_peaks[[i]]))[[1]])
+  df_sum_withfam[i,2]<- as.numeric(table(is.na(down.up_peaks[[i+1]]))[[1]])
+  df_sum_withfam[i,3]<- as.numeric(table(is.na(down.up.down_peaks[[i+1]]))[[1]])
+  df_sum_withfam[i,4]<- as.numeric(table(is.na(gradual.up_peaks[[i+1]]))[[1]])
+  df_sum_withfam[i,5]<- as.numeric(table(is.na(up.down_peaks[[i+1]]))[[1]])
+  df_sum_withfam[i,6]<- as.numeric(table(is.na(up.down.up_peaks[[i+1]]))[[1]])
+ 
+}
+df_sum_withfam<-as.data.frame(df_sum_withfam)
+rownames(df_sum_withfam)<-c(colnames(unchanged_peaks)[1:9])
+colnames(df_sum_withfam)<-c("unchanged","down.up", "down.up.down","gradual.up","up.down","up.down.up")
+
+#no CRE
+df_sum_nofam <-matrix(ncol=6, nrow=9)
+for (j in 1:9){
+  df_sum_nofam[j,1]<- as.numeric(table(is.na(unchanged_peaks[[j]]))[[2]])
+  df_sum_nofam[j,2]<- as.numeric(table(is.na(down.up_peaks[[j+1]]))[[2]])
+  df_sum_nofam[j,3]<- as.numeric(table(is.na(down.up.down_peaks[[j+1]]))[[2]])
+  df_sum_nofam[j,4]<- as.numeric(table(is.na(gradual.up_peaks[[j+1]]))[[2]])
+  df_sum_nofam[j,5]<- as.numeric(table(is.na(up.down_peaks[[j+1]]))[[2]])
+  df_sum_nofam[j,6]<- as.numeric(table(is.na(up.down.up_peaks[[j+1]]))[[2]])
+}
+
+df_sum_nofam<-as.data.frame(df_sum_nofam)
+rownames(df_sum_nofam)<-c("no CRE", "no ETV1","no Egr1","no Fosl2","no KLF13","no Klf4","no NFYB", "no RREB1", "no Ronin")
+colnames(df_sum_nofam)<-c("unchanged","down.up", "down.up.down","gradual.up","up.down","up.down.up")
+
+```
+
+
+```{r, engine='bash', eval=F, echo=T}
+df_sum2<-rbind(df_sum_nofam, df_sum_withfam)
+
+df_sum2_fraction<-df_sum2
+df_sum2_fraction$unchanged<-100*df_sum2_fraction$unchanged/nrow(unchanged_peaks)
+df_sum2_fraction$down.up<-100*df_sum2_fraction$down.up/nrow(down.up_peaks)
+df_sum2_fraction$down.up.down<-100*df_sum2_fraction$down.up.down/nrow(down.up.down_peaks)
+df_sum2_fraction$gradual.up<-100*df_sum2_fraction$gradual.up/nrow(gradual.up_peaks)
+df_sum2_fraction$up.down<-100*df_sum2_fraction$up.down/nrow(up.down_peaks)
+df_sum2_fraction$up.down.up<-100*df_sum2_fraction$up.down.up/nrow(up.down.up_peaks)
+
+
+library("reshape")
+df_sum2_fraction_mut<-df_sum2_fraction
+df_sum2_fraction_mut$family<-rownames(df_sum2_fraction)
+df_sum2_fraction_mut<-melt(df_sum2_fraction_mut, 
+                           id.vars="family",
+                           variable.name="class",
+                           value.name="fraction")
+
+df_sum2_fraction_mut$variable <- factor(df_sum2_fraction_mut$variable, levels = c("gradual.up","up.down","up.down.up","unchanged", "down.up", "down.up.down" ))
+```
+
+```{r, engine='bash', eval=F, echo=T}
+library(ggplot2)
+
+num=c(1,10,19,28,37,46,55,64,82,73,91,100)
+
+plot_cre<-ggplot(df_sum2_fraction_mut[num,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without CRE', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("red","blue")) +
+        theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+plot_etv1<-ggplot(df_sum2_fraction_mut[num+1,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without ETV1', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+
+plot_Egr1<-ggplot(df_sum2_fraction_mut[num+2,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without Egr1', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+plot_Fosl2<-ggplot(df_sum2_fraction_mut[num+3,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without Fosl2', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+
+plot_KLF13<-ggplot(df_sum2_fraction_mut[num+4,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without KLF13', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+plot_Klf4<-ggplot(df_sum2_fraction_mut[num+5,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without Klf4', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+plot_NFYB<-ggplot(df_sum2_fraction_mut[num+6,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without NFYB', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("red","blue")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+plot_RREB1<-ggplot(df_sum2_fraction_mut[num+7,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without RREB1', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("blue","red")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+plot_Ronin<-ggplot(df_sum2_fraction_mut[num+8,],aes(x =variable ,y = value, fill=family)) +
+        geom_bar(stat='identity',position='stack',color='black') +
+        
+        labs(title = 'Proportions of peaks with or without Ronin', y = '% of Peaks', x = NULL, fill = NULL) +
+        theme_minimal() +
+        theme(panel.grid.minor = element_blank(),
+              axis.ticks = element_blank()) +
+        scale_fill_manual(values = c("blue","red")) +
+  theme(axis.text.x=element_text(angle=45, hjust=0.9))
+
+```
+
+```{r, engine='bash', eval=F, echo=T}
+#library(ggplot2)
+library(patchwork)
+
+pdf(file='Proportions of peaks with or without each family motif by cluster.pdf', width=8,height=5)
+
+(plot_cre | plot_etv1)/
+  (plot_Egr1 | plot_Fosl2)
+
+  ( plot_KLF13 | plot_Klf4)/ 
+(plot_NFYB |plot_RREB1 )
+
+  plot_Ronin
+
+dev.off()
+```
+
+![peak_proportion](images/peak_proportion-with_or_without_motif_by_cluster.jpg)
+
+
+
 ### FIMO scores violin plot box and whisker plots for isolated peaks
 
 ```{r, engine='bash', eval=F, echo=T}
@@ -2670,7 +3113,7 @@ trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
                 plot.symbol = list(col="black", lwd=1.0, pch ='.'))
 
 print(
-    xyplot(value ~  sample.conditions | family, group = genes, data = plot.df, type = c('l'),#type = c('l','p'),
+    xyplot(value ~  sample.conditions | family, group = genes, data = plot.df, type = c('l'), #type = c('l','p'),
        scales=list(x=list(cex=1.5,relation = "free", rot = 45), y =list(cex=1.5, relation="free")),
        aspect=1.0,
        layout = c(3,1),
@@ -2694,113 +3137,9 @@ dev.off()
 ```
 
 ![traces](images/three_isolated_families_dynamic_accessibility.jpg)
+### motif density plot by cluster
 
-# Generating comprehensive ATAC dataframe
 
-```{r, engine='bash', eval=F, echo=T}
-load("fimo.scores.atac.Rdata") # contains increase or decreased peaks
-load("fimo.scores.nondyn.atac.Rdata") # contains unchanged peaks
-load('fimo.scores.all.other.atac.Rdata') # contains all other peaks
-load('plot.df.atac.Rdata') 
 
-plot.df = data.frame()
-for(i in 1:ncol(fimo.scores.atac)) {
-    temp = plot.df.atac[plot.df.atac$genes %in% rownames(fimo.scores.atac[!is.na(fimo.scores.atac[,i]),]),]
-    temp$family = colnames(fimo.scores.atac)[i]
-    plot.df = rbind(plot.df,temp)
-}
 
-plot.df$genes = as.factor(plot.df$genes)
-no.fam = rownames(fimo.scores.atac[which(rowSums(is.na(fimo.scores.atac)) == ncol(fimo.scores.atac)),])
-temp = plot.df.atac[plot.df.atac$genes %in% no.fam,]
-temp$family = 'No Family'
 
-plot.df = rbind(plot.df,temp)
-
-plot.df$status = 'Activated'
-plot.df[plot.df$supercluster == 'down.up' | plot.df$supercluster == 'down.up.down',]$status = 'Repressed'
-
-df1<-fimo.scores.nondyn.atac
-df1$genes<-rownames(df1)
-df1$chr = sapply(strsplit(df1$genes, ':|-'), '[', 1)
-df1$start = sapply(strsplit(df1$genes, ':|-'), '[', 2)
-df1$end = sapply(strsplit(df1$genes, ':|-'), '[', 3)
-df1$status<-"unchanged"
-
-df2<-fimo.scores.atac
-df2$genes<-rownames(df2)
-df2$chr = sapply(strsplit(df2$genes, ':|-'), '[', 1)
-df2$start = sapply(strsplit(df2$genes, ':|-'), '[', 2)
-df2$end = sapply(strsplit(df2$genes, ':|-'), '[', 3)
-label<-unique(plot.df[,c(16,18)])
-df2<-merge(df2,label,by="genes")
-df2[df2$status=="Activated",]$status="Gain Accessibility"
-df2[df2$status=="Repressed",]$status="Lose Accessibility"
-
-df3<-fimo.scores.all.other.atac
-df3$genes<-rownames(df3)
-df3$chr = sapply(strsplit(df3$genes, ':|-'), '[', 1)
-df3$start = sapply(strsplit(df3$genes, ':|-'), '[', 2)
-df3$end = sapply(strsplit(df3$genes, ':|-'), '[', 3)
-df3$status<-"all.other"
-
-fimo_scores_allpeaks<-rbind(df1,df2,df3)
-save(fimo_scores_allpeaks, file = 'fimo.scores.allpeaks.atac.Rdata')
-```
-
-```{r, engine='bash', eval=F, echo=T}
-load('fimo.scores.allpeaks.atac.Rdata')
-df = data.frame(fimo_scores_allpeaks)
-```
-
-add counts
-```{r, engine='bash', eval=F, echo=T}
-# add counts
-load('normalized.counts.atac.Rdata')
-zero.min = c()
-fifteen.min = c()
-thirty.min = c()
-fourtyfive.min = c()
-
-genes = c()
-
-print('Getting ATAC means')
-for (i in 1:nrow(normalized.counts)) {
-    zero.min = append(zero.min, mean(normalized.counts[i,13:16]))
-    fifteen.min = append(fifteen.min, mean(normalized.counts[i,1:4]))
-    thirty.min = append(thirty.min, mean(normalized.counts[i,5:8]))
-    fourtyfive.min = append(fourtyfive.min, mean(normalized.counts[i,9:12]))
-    
-    genes = append(genes,rownames(normalized.counts)[i])
-}
-
-atac.means = data.frame(row.names = genes, 
-                        min.0 = zero.min, 
-                        min.15 = fifteen.min,
-                        min.30 = thirty.min, 
-                        min.45 = fourtyfive.min)
-
-save(atac.means,file='atac.means.Rdata')
-
-atac.means$genes<-rownames(atac.means)
-df = merge(df, atac.means, by='genes')
-```
-
-add cluster information
-```{r, engine='bash', eval=F, echo=T}
-# add cluster information
-# down.up: cluster 4 & 6
-# down.up.down: cluster 1
-# gradual.up: cluster 5
-# up.down: cluster 3 & 7
-# up.down.up: cluster 2
-
-cluster.df = unique(plot.df.atac[,c(5,15,16)])
-
-df = merge(df,cluster.df,by='genes', all=T)
-
-#rownames(df) = df[,1]
-#df = df[,-1]
-
-save(df,file='atac.comprehensive.Rdata')
-```
