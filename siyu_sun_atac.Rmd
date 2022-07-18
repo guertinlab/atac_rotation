@@ -2834,6 +2834,8 @@ dev.off()
 
 ### motif density plot
 
+## by unchanged, gain, lose
+
 Generate composites for all activated and repressed peaks
 ```{r, engine='bash', eval=F, echo=T}
 pswm.fimo <- function(fimo.in, out = 'outfilename', nm = 'bHLH_Activated', rc = FALSE) {
@@ -3038,19 +3040,19 @@ for(i in 1:ncol(fimo.scores.atac)) {
     dec.inten = bed.step.probeQuery.bigWig(loaded.bw, decreased,
                                            gap.value = 0, step = 10, as.matrix = TRUE)
     dec.query.df = data.frame(cbind(colMeans(dec.inten), factor.name,
-                                    'Closed', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
+                                    'Lose', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
     colnames(dec.query.df) = c('density', 'tf', 'category', 'range')
     
     inc.inten = bed.step.probeQuery.bigWig(loaded.bw, increased,
                                            gap.value = 0, step = 10, as.matrix = TRUE)
     inc.query.df = data.frame(cbind(colMeans(inc.inten), factor.name,
-                                    'Opened', seq(-half.win,(half.win-10), 10)), stringsAsFactors=F)
+                                    'Gain', seq(-half.win,(half.win-10), 10)), stringsAsFactors=F)
     colnames(inc.query.df) = c('density', 'tf', 'category', 'range')
     
     ctrl.inten = bed.step.probeQuery.bigWig(loaded.bw, not.different,
                                             gap.value = 0, step = 10, as.matrix = TRUE)
     ctrl.query.df = data.frame(cbind(colMeans(ctrl.inten), factor.name,
-                                     'Nondynamic', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
+                                     'unchanged', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
     colnames(ctrl.query.df) = c('density', 'tf', 'category', 'range')
     
     tf.all = rbind(dec.query.df, inc.query.df, ctrl.query.df)
@@ -3062,10 +3064,181 @@ all.fimo[,1] = as.numeric(all.fimo[,1])
 all.fimo[,4] = as.numeric(all.fimo[,4])
 
 plot.fimo.lattice(all.fimo, num.m = -500, num.p = 500,
-                  col.lines = c('blue','grey65','red'))
+                  col.lines = c('red','blue','grey65'))
 ```
 
-![motif_density](images/motif_enrichment_around_summits.jpg)
+![motif_density](images/motif_enrichment_around_summits1.jpg)
+## by supercluster
+module load R/4.1.2
+```{r, engine='bash', eval=F, echo=T}
+library(lattice)
+library(bigWig)
+
+plot.fimo.lattice <- function(dat, fact = 'Motif', summit = 'Hypersensitivity Summit', class= '',
+                              num.m = -200, num.p =90, y.low =0, y.high = 0.2,
+                              col.lines = c(rgb(0,0,1,1/2), rgb(1,0,0,1/2),
+                                            rgb(0.1,0.5,0.05,1/2), rgb(0,0,0,1/2),
+                                            rgb(1/2,0,1/2,1/2), rgb(0,1/2,1/2,1/2), rgb(1/2,1/2,0,1/2)),
+                              fill.poly = c(rgb(0,0,1,1/4), rgb(1,0,0,1/4), rgb(0.1,0.5,0.05,1/4),
+                                            rgb(0,0,0,1/4), rgb(1/2,0,1/2,1/4))) {
+    
+    pdf('motif_enrichment_around_summits_by_cluster.pdf')#, width=6.83, height=3.5)
+    print(xyplot(density ~ range|tf, groups = category, data = dat, type = 'l',
+                 scales=list(x=list(cex=0.8,relation = "free"), 
+                 y =list(cex=0.8,axs = 'i',relation = "free")),
+                 xlim=c(num.m,num.p),                                       
+                 col = col.lines,
+                 auto.key = list(points=F, lines=T, cex=0.8, columns = 2),
+                 par.settings = list(superpose.symbol = list(pch = c(16), col=col.lines, cex =0.7),
+                                     superpose.line = list(col = col.lines, lwd=c(2,2,2,2,2,2),
+                                                           lty = c(1,1,1,1,1,1,1,1,1))),
+                 cex.axis=1.0,
+                 par.strip.text=list(cex=0.9, font=1, col='black',font=2),
+                 aspect=1.0,
+                 between=list(y=0.5, x=0.5),
+                 index.cond = list(c(1,4,6,7,2,3,5,8,9)),
+                 lwd=1,
+                 ylab = list(label = "Weighted Motif Density", cex =1,font=2),
+                 xlab = list(label = 'Distance from ATAC-seq Peak Summit', cex =1,font=2),
+                 strip = function(..., which.panel, bg) {
+                     bg.col = 'grey'
+                     strip.default(..., which.panel = which.panel, 
+                                    bg = rep(bg.col, length = which.panel)[which.panel])
+                 }
+                 ))
+    dev.off()
+}
+
+bed.window <- function(bed, half.window) {
+  bed[,2] = (bed[,2]+bed[,3])/2-half.window 
+  bed[,3] = bed[,2] + 2 * half.window 
+  return(bed)
+  }
+
+load('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/csite_minsite/plot.df.atac.Rdata')
+load('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/csite_minsite/fimo.scores.atac.Rdata')
+
+plot.df = data.frame()
+for(i in 1:ncol(fimo.scores.atac)) {
+    temp = plot.df.atac[plot.df.atac$genes %in% rownames(fimo.scores.atac[!is.na(fimo.scores.atac[,i]),]),]
+    temp$family = colnames(fimo.scores.atac)[i]
+    plot.df = rbind(plot.df,temp)
+}
+
+plot.df$status = 'Activated'
+plot.df[plot.df$supercluster == 'down.up.down' | plot.df$supercluster == 'down.up',]$status = 'Repressed'
+
+```
+
+```{r, engine='bash', eval=F, echo=T}
+all.fimo = data.frame(matrix(ncol = 4, nrow = 0))
+colnames(all.fimo) = c('density', 'tf', 'category', 'range')
+
+half.win = 600
+file.suffix = '_mm39_instances.bigWig'
+dir = '/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/csite_minsite/fimo_top_database_PSWM_top'
+setwd(dir)
+
+gradual.up = plot.df[plot.df$supercluster == 'gradual.up',12:14]
+gradual.up[,2] = as.numeric(gradual.up[,2])
+gradual.up[,3] = as.numeric(gradual.up[,3])
+gradual.up = bed.window(gradual.up,half.win)
+
+up.down = plot.df[plot.df$supercluster == 'up.down',12:14]
+up.down[,2] = as.numeric(up.down[,2])
+up.down[,3] = as.numeric(up.down[,3])
+up.down = bed.window(up.down,half.win)
+
+up.down.up = plot.df[plot.df$supercluster == 'up.down.up',12:14]
+up.down.up[,2] = as.numeric(up.down.up[,2])
+up.down.up[,3] = as.numeric(up.down.up[,3])
+up.down.up = bed.window(up.down.up,half.win)
+
+down.up = plot.df[plot.df$supercluster == 'down.up',12:14]
+down.up[,2] = as.numeric(down.up[,2])
+down.up[,3] = as.numeric(down.up[,3])
+down.up = bed.window(down.up,half.win)
+
+down.up.down = plot.df[plot.df$supercluster == 'down.up.down',12:14]
+down.up.down[,2] = as.numeric(down.up.down[,2])
+down.up.down[,3] = as.numeric(down.up.down[,3])
+down.up.down = bed.window(down.up.down,half.win)
+
+
+not.different = read.table('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/csite_minsite/nondynamic_peaks.bed')
+not.different = not.different[not.different$V1 != 'chrM',]
+not.different = bed.window(not.different,half.win)
+
+
+all.fimo = data.frame()
+for(i in 1:ncol(fimo.scores.atac)) {
+    factor = colnames(fimo.scores.atac)[i]
+
+    mod.bigWig = paste0(factor,file.suffix)
+    factor.name = factor
+    print(factor.name)
+
+    loaded.bw = load.bigWig(mod.bigWig)
+    
+    
+    gradual.up.inten = bed.step.probeQuery.bigWig(loaded.bw, gradual.up,
+                                           gap.value = 0, step = 10, as.matrix = TRUE)
+    gradual.up.query.df = data.frame(cbind(colMeans(gradual.up.inten), factor.name,
+                                    'gradual.up', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
+    colnames(gradual.up.query.df) = c('density', 'tf', 'category', 'range')
+    
+    
+    up.down.inten = bed.step.probeQuery.bigWig(loaded.bw, up.down,
+                                           gap.value = 0, step = 10, as.matrix = TRUE)
+    up.down.query.df = data.frame(cbind(colMeans(up.down.inten), factor.name,
+                                    'up.down', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
+    colnames(up.down.query.df) = c('density', 'tf', 'category', 'range')
+    
+    
+    up.down.up.inten = bed.step.probeQuery.bigWig(loaded.bw, up.down.up,
+                                           gap.value = 0, step = 10, as.matrix = TRUE)
+    up.down.up.query.df = data.frame(cbind(colMeans(up.down.up.inten), factor.name,
+                                    'up.down.up', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
+    colnames(up.down.up.query.df) = c('density', 'tf', 'category', 'range')
+    
+    
+    down.up.inten = bed.step.probeQuery.bigWig(loaded.bw, down.up,
+                                           gap.value = 0, step = 10, as.matrix = TRUE)
+    down.up.query.df = data.frame(cbind(colMeans(down.up.inten), factor.name,
+                                    'down.up', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
+    colnames(down.up.query.df) = c('density', 'tf', 'category', 'range')
+    
+    
+    down.up.down.inten = bed.step.probeQuery.bigWig(loaded.bw, down.up.down,
+                                           gap.value = 0, step = 10, as.matrix = TRUE)
+    down.up.down.query.df = data.frame(cbind(colMeans(down.up.down.inten), factor.name,
+                                    'down.up.down', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
+    colnames(down.up.down.query.df) = c('density', 'tf', 'category', 'range')
+    
+    
+    
+    ctrl.inten = bed.step.probeQuery.bigWig(loaded.bw, not.different,
+                                            gap.value = 0, step = 10, as.matrix = TRUE)
+    ctrl.query.df = data.frame(cbind(colMeans(ctrl.inten), factor.name,
+                                     'unchanged', seq(-half.win, (half.win-10), 10)), stringsAsFactors=F)
+    colnames(ctrl.query.df) = c('density', 'tf', 'category', 'range')
+    
+    
+    
+    
+    tf.all = rbind(gradual.up.query.df, up.down.query.df, up.down.up.query.df, down.up.query.df, down.up.down.query.df, ctrl.query.df)
+
+    all.fimo = rbind(all.fimo, tf.all)
+}
+
+all.fimo[,1] = as.numeric(all.fimo[,1])
+all.fimo[,4] = as.numeric(all.fimo[,4])
+
+plot.fimo.lattice(all.fimo, num.m = -500, num.p = 500,
+                  col.lines = c('blue','cornflowerblue','tomato3','grey65','red','lightsalmon'))
+```
+
+![motif_density_bycluster](images/motif_enrichment_around_summits_by_cluster.jpg)
 
 ### Q: is a motif specific to clusters/group of clusters that share kinetic profiles?
 CRE, NFYB and Ronin
