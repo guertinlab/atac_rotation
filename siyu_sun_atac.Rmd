@@ -3241,16 +3241,16 @@ plot.fimo.lattice(all.fimo, num.m = -500, num.p = 500,
 ![motif_density_bycluster](images/motif_enrichment_around_summits_by_cluster.jpg)
 
 ### Q: is a motif specific to clusters/group of clusters that share kinetic profiles?
-CRE, NFYB and Ronin
+CRE, NFYB, klf13, etv1, fosl2
 
 ### Plot traces of isolated peaks 
 
-only for the three candidates motif: CRE, NFYB and Ronin
+only for the five candidates motif: CRE, NFYB, klf13, etv1, fosl2
 
 ```{r, engine='bash', eval=F, echo=T}
 plot.df = data.frame()
 
-fimo.scores.atac.subset<-fimo.scores.atac[, c(1,7,9)]
+fimo.scores.atac.subset<-fimo.scores.atac[, c(1,2,4,5,7)]
 
 for(i in 1:ncol(fimo.scores.atac.subset)) {
       scores.temp = fimo.scores.atac.subset[!is.na(fimo.scores.atac.subset[,i]),]
@@ -3279,7 +3279,7 @@ cat.colours <- cat.colours[match(levels(plot.df$genes), cat.colours$genes), ]
 
 
 ```{r, engine='bash', eval=F, echo=T}
-pdf(file = 'three_isolated_families_dynamic_accessibility.pdf',width=14,height=14)
+pdf(file = 'five_isolated_families_dynamic_accessibility.pdf',width=14,height=14)
 
 trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
                 box.rectangle = list( lwd=1.0, col="black", alpha = 1.0),
@@ -3289,7 +3289,7 @@ print(
     xyplot(value ~  sample.conditions | family, group = genes, data = plot.df, type = c('l'), #type = c('l','p'),
        scales=list(x=list(cex=1.5,relation = "free", rot = 45), y =list(cex=1.5, relation="free")),
        aspect=1.0,
-       layout = c(3,1),
+       layout = c(3,2),
        between=list(y=0.5, x=0.5),
        
        main = list(label = 'Three Isolated Family Motifs in Dynamic Peaks', cex = 2.0),
@@ -3309,8 +3309,7 @@ print(
 dev.off()
 ```
 
-![traces](images/three_isolated_families_dynamic_accessibility.jpg)
-### motif density plot by cluster
+![traces](images/five_isolated_families_dynamic_accessibility.jpg)
 
 
 
