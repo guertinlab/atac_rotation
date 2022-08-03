@@ -1932,7 +1932,7 @@ done
 
 ### top motif hit seqlogos
 
-![seqlogo](images/seqlogos.jpg)
+![seqlogo](images/seqlogos2.jpg)
 
 # Generating comprehensive ATAC dataframe
 
@@ -2239,6 +2239,45 @@ atac.comprehensive =df
 save(atac.comprehensive,file='atac.comprehensive.Rdata')
 ```
 
+### add Pro-genes and TSS location info
+```{r, engine='bash', eval=F, echo=T}
+mastercoords<-read.table("mastercoords.bed") #contains genes, strand, TSS info from Pro-seq
+#TSS locarion
+mastercoords1<-mastercoords
+mastercoords1$TSS<-NA
+for (i in 1:nrow(mastercoords1)){
+  if (mastercoords1[i,6]=="+"){
+  mastercoords1[i,7]=mastercoords1[i,2]
+  } else{
+  mastercoords1[i,7]=mastercoords1[i,3]
+  }
+}
+load("atac.comprehensive.Rdata")
+atac.comprehensive1 = atac.comprehensive
+atac.comprehensive1$summit = as.numeric(atac.comprehensive1$start)+100
+atac.comprehensive1$Progenes=NA
+atac.comprehensive1$TSS=NA
+atac.comprehensive2=data.frame()
+for (i in 1:length(unique(atac.comprehensive1$chr))){
+  chro=paste0("chr", i)
+  for (j in 1:nrow(mastercoords1[mastercoords1$V1==chro,])){
+    
+      temp=subset(atac.comprehensive1[atac.comprehensive1$chr==chro,],
+                  atac.comprehensive1[atac.comprehensive1$chr==chro,]$summit > (mastercoords1[mastercoords1$V1==chro,][j,7]-10000) & 
+                    atac.comprehensive1[atac.comprehensive1$chr==chro,]$summit < (mastercoords1[mastercoords1$V1==chro,][j,7]+10000))
+      
+      if (nrow(temp)>0) {
+      temp$Progenes = mastercoords1[mastercoords1$V1==chro,][j,4]
+      temp$TSS = mastercoords1[mastercoords1$V1==chro,][j,7]
+        }
+      
+      atac.comprehensive2=rbind(atac.comprehensive2, temp)
+      }
+}
+atac.comprehensive2$location=abs(as.numeric(atac.comprehensive2$summit)  - as.numeric( atac.comprehensive2$summit)
+                                )
+save(atac.comprehensive2, file="atac.comprehensive2.Rdata")
+```
 
 # motif analysis visualization
 
