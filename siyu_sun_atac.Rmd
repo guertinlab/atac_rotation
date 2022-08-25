@@ -2420,7 +2420,7 @@ dev.off()
 ![motif_occurance](number of peaks2.pdf)
 
 
-```{r, engine='bash', eval=F, echo=T}
+```{r engine='bash', eval=F, echo=T}
 df_sum_withfam <-matrix(ncol=3, nrow=7)
 for (i in 1:7){
   df_sum_withfam[i,1]<- as.numeric(table(is.na(unchanged_peaks[[i]]))[[1]])
@@ -2431,7 +2431,7 @@ df_sum_withfam<-as.data.frame(df_sum_withfam)
 rownames(df_sum_withfam)<-c(colnames(unchanged_peaks)[1:7])
 colnames(df_sum_withfam)<-c("unchanged","Increase", "Decrease")
 
-#no CRE
+#count peaks with no family
 df_sum_nofam <-matrix(ncol=3, nrow=7)
 for (j in 1:7){
   df_sum_nofam[j,1]<-as.numeric(table(is.na(unchanged_peaks[[j]]))[[2]])
@@ -2495,7 +2495,7 @@ print(ggplot(x, aes(x = factor(variable, level=c("Increase", "unchanged", "Decre
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
+        scale_fill_manual(values = c("white", "darkgrey"))+
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 25)) 
 )
@@ -2515,7 +2515,7 @@ plot_AP1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
+        scale_fill_manual(values = c("white", "darkgrey"))+
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
@@ -2525,7 +2525,7 @@ plot_Jun <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
+        scale_fill_manual(values = c("white", "darkgrey"))+
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
@@ -2535,7 +2535,7 @@ plot_SP1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
+        scale_fill_manual(values = c("white", "darkgrey"))+
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
@@ -2545,7 +2545,7 @@ plot_NFY <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
+        scale_fill_manual(values = c("white", "darkgrey"))+
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
@@ -2555,7 +2555,7 @@ plot_CTCF <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchange
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
+        scale_fill_manual(values = c("white", "darkgrey"))+
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
@@ -2565,7 +2565,7 @@ plot_Znf143 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchan
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
+        scale_fill_manual(values = c("white", "darkgrey"))+
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
@@ -2575,7 +2575,7 @@ plot_Spi1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchange
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
+        scale_fill_manual(values = c("white", "darkgrey"))+
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
