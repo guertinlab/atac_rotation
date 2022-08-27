@@ -1732,10 +1732,12 @@ for family in composite_denovo_motifs/PSWM*
 do
     name=$(echo $family | awk -F"composite_denovo_motifs/PSWM_" '{print $NF}')
     echo $name
-    tomtom -no-ssc -o composite_denovo_db/$name.tomtom_output -verbosity 1 -min-overlap 5 -dist ed -evalue -thresh 0.05 composite_denovo_motifs/PSWM_${name}/*${name}_meme.txt homer_uniprobe_jaspar_edited.txt
-    tomtom -no-ssc -o composite_denovo_db/$name.tomtom_output -verbosity 1 -min-overlap 5 -dist ed -text -evalue -thresh 0.05 composite_denovo_motifs/PSWM_${name}/*${name}_meme.txt homer_uniprobe_jaspar_edited.txt > composite_denovo_db/$name.tomtom_output/tomtom.txt
+    tomtom -no-ssc -o composite_denovo_db/$name.tomtom_output -verbosity 1 -min-overlap 5 -dist ed -evalue -thresh 0.0005 composite_denovo_motifs/PSWM_${name}/*${name}_meme.txt homer_uniprobe_jaspar_edited.txt
+    tomtom -no-ssc -o composite_denovo_db/$name.tomtom_output -verbosity 1 -min-overlap 5 -dist ed -text -evalue -thresh 0.0005 composite_denovo_motifs/PSWM_${name}/*${name}_meme.txt homer_uniprobe_jaspar_edited.txt > composite_denovo_db/$name.tomtom_output/tomtom.txt
 done
 ```
+
+end up using tomtom threshold ==0.0005 \
 
 
 ### Identify the top hit
@@ -1782,6 +1784,7 @@ cp top_database_PSWM_motifs_uniq.txt ..
 cd ..
 ```
 
+
 extract individual meme files from combined database \
 
 ```{r engine='bash', eval=F, echo=T}
@@ -1817,10 +1820,14 @@ done
 
 ### top motif hit seqlogos
 
-![seqlogo](motifs.pdf)
+![seqlogo](motifs_0.0005.pdf)
+
+
+
+
+
 
 ## Genomic FIMO
-
 
 ```{r engine='bash', eval=F, echo=T}
 #!/bin/bash
@@ -1894,7 +1901,7 @@ N=34056 \
 mkdir main_figure_beds
 cd fimo_top_database_PSWM
 cp *_fimo.bed ../main_figure_beds
-cp *_fimo_nondyn.bed ../main_figure_beds
+cd ../main_figure_beds
 ```
 
 
@@ -2042,6 +2049,7 @@ for(bed.file in Sys.glob(file.path('*_fimo_allother.bed'))) {
     colnames(res_c)[ncol(res_c)] = factor.name
 
 }
+
 res_c = res_c[,-c(1:3)]
 
 fimo.scores.all.other.atac = res_c
@@ -2158,6 +2166,7 @@ df = merge(df,cluster.df,by='genes', all=T)
 
 #rownames(df) = df[,1]
 #df = df[,-1]
+colnames(df)[2:7]<- c("AP1", "CTCF-like factor",  "NFY", "Znf143", "ETS-Spi1", "SP1-like factor" )
 
 atac.comprehensive =df
 save(atac.comprehensive,file='atac.comprehensive.Rdata')
@@ -2166,7 +2175,7 @@ save(atac.comprehensive,file='atac.comprehensive.Rdata')
 ### add Pro-genes and TSS location info
 ```{r engine='bash', eval=F, echo=T}
 mastercoords<-read.table("mastercoords.bed") #contains genes, strand, TSS info from Pro-seq
-#TSS locarion
+#TSS location
 mastercoords1<-mastercoords
 mastercoords1$TSS<-NA
 for (i in 1:nrow(mastercoords1)){
@@ -2198,7 +2207,7 @@ for (i in 1:length(unique(atac.comprehensive1$chr))){
       atac.comprehensive2=rbind(atac.comprehensive2, temp)
       }
 }
-atac.comprehensive2$location=abs(as.numeric(atac.comprehensive2$summit)  - as.numeric( atac.comprehensive2$summit)
+atac.comprehensive2$location=abs(as.numeric(atac.comprehensive2$TSS)  - as.numeric( atac.comprehensive2$summit)
                                 )
 save(atac.comprehensive2, file="atac.comprehensive2.Rdata")
 ```
@@ -2215,9 +2224,9 @@ load('fimo.scores.all.other.atac.Rdata') # contains all other peaks
 load('plot.df.atac.Rdata') 
 
 # change TF motif name to family name
-colnames(fimo.scores.atac)<- c("AP1", "CTCF-like factor", "Jun-related factor", "NFY", "Znf143", "Spi1", "SP1-like factor" )
-colnames(fimo.scores.nondyn.atac) <-c("AP1", "CTCF-like factor", "Jun-related factor", "NFY", "Znf143", "Spi1", "SP1-like factor" )
-colnames(fimo.scores.all.other.atac) <-c("AP1", "CTCF-like factor", "Jun-related factor", "NFY", "Znf143", "Spi1", "SP1-like factor" )
+colnames(fimo.scores.atac)<- c("AP1", "CTCF-like factor",  "NFY", "Znf143", "ETS-Spi1", "SP1-like factor" )
+colnames(fimo.scores.nondyn.atac) <-c("AP1", "CTCF-like factor",  "NFY", "Znf143", "ETS-Spi1", "SP1-like factor" )
+colnames(fimo.scores.all.other.atac) <-c("AP1", "CTCF-like factor",  "NFY", "Znf143", "ETS-Spi1", "SP1-like factor" )
 ```
 
 ```{r engine='bash', eval=F, echo=T}
@@ -2250,7 +2259,7 @@ for(i in 1:ncol(fimo.scores.nondyn.atac)) {
      temp=fimo.scores.nondyn.atac[!is.na(fimo.scores.nondyn.atac[,i]),]
      temp$family=colnames(fimo.scores.nondyn.atac)[i]
      temp$genes=rownames(temp)
-     plot.df2 = rbind(plot.df2,temp[,8:9])
+     plot.df2 = rbind(plot.df2,temp[,7:8])
 }
 
 plot.df2$genes = as.factor(plot.df2$genes)
@@ -2313,7 +2322,7 @@ dev.off()
 #library(ggplot2)
 pdf(file='number of dynamic peaks in each family motif.pdf',width=12,height=7)
 print(
-        ggplot(df[1:16,],aes(x = reorder(names,-index),y = num,fill=cond)) +
+        ggplot(df[1:14,],aes(x = reorder(names,-index),y = num,fill=cond)) +
         geom_bar(stat='identity',position='stack',color='black') +
         #geom_text(aes(label=num),position=position_stack(vjust = 0.5),size=6) +
         labs(title = 'Number of Peaks For Each Motif Family', y = 'Number of Dynamic Peaks', x = NULL, fill = NULL) +
@@ -2325,7 +2334,7 @@ print(
               axis.title.y = element_text(size=18,face='bold'),
               legend.text = element_text(size=18,face='bold'),
               plot.title = element_text(size=22,face='bold',hjust=0.5)) +
-        scale_fill_manual(values = c("blue","red","grey"))
+        scale_fill_manual(values = c("blue","red"))
 )
 dev.off()
 
@@ -2399,7 +2408,7 @@ unchanged_peaks$genes<-rownames(fimo.scores.nondyn.atac)
 family=c("Increase","Decrease", "unchanged", "all.other")
 peaks=c(nrow(Increased_peaks), nrow(Decreased_peaks), nrow(unchanged_peaks), nrow(fimo.scores.all.other.atac))
 y2=data.frame(family, peaks)
-# library(dplyr)
+library(dplyr)
 y2 <- y2 %>% 
   mutate( class= "ATAC peaks")
 pdf('number of peaks2.pdf', width=5,height=4)
@@ -2421,26 +2430,26 @@ dev.off()
 
 
 ```{r engine='bash', eval=F, echo=T}
-df_sum_withfam <-matrix(ncol=3, nrow=7)
-for (i in 1:7){
+df_sum_withfam <-matrix(ncol=3, nrow=6)
+for (i in 1:6){
   df_sum_withfam[i,1]<- as.numeric(table(is.na(unchanged_peaks[[i]]))[[1]])
   df_sum_withfam[i,2]<- as.numeric(table(is.na(Increased_peaks[[i+1]]))[[1]])
   df_sum_withfam[i,3]<- as.numeric(table(is.na(Decreased_peaks[[i+1]]))[[1]])
 }
 df_sum_withfam<-as.data.frame(df_sum_withfam)
-rownames(df_sum_withfam)<-c(colnames(unchanged_peaks)[1:7])
+rownames(df_sum_withfam)<-c(colnames(unchanged_peaks)[1:6])
 colnames(df_sum_withfam)<-c("unchanged","Increase", "Decrease")
 
 #count peaks with no family
-df_sum_nofam <-matrix(ncol=3, nrow=7)
-for (j in 1:7){
+df_sum_nofam <-matrix(ncol=3, nrow=6)
+for (j in 1:6){
   df_sum_nofam[j,1]<-as.numeric(table(is.na(unchanged_peaks[[j]]))[[2]])
   df_sum_nofam[j,2] <-as.numeric(table(is.na(Increased_peaks[[j+1]]))[[2]])
   df_sum_nofam[j,3] <-as.numeric(table(is.na(Decreased_peaks[[j+1]]))[[2]])
 }
 
 df_sum_nofam<-as.data.frame(df_sum_nofam)
-rownames(df_sum_nofam)<-c("no AP1", "no CTCF-like factor", "no Jun-related factor", "no NFY",  "no Znf143", "no Spi1", "no SP1-like factor")
+rownames(df_sum_nofam)<-c("no AP1", "no CTCF-like factor",  "no NFY", "no Znf143", "no ETS-Spi1", "no SP1-like factor" )
 colnames(df_sum_nofam)<-c("unchanged","Increase", "Decrease")
 
 df_sum2<-rbind(df_sum_nofam, df_sum_withfam)
@@ -2450,15 +2459,15 @@ df_sum2<-rbind(df_sum_nofam, df_sum_withfam)
 
 
 ```{r, engine='bash', eval=F, echo=T}
-chidata = data.frame(matrix(ncol = 5, nrow = 7))
-for (i in 1:7){
-  chidata$fam_vs_no_spe_fam[i]<-as.character(rownames(df_sum2)[i+7])
+chidata = data.frame(matrix(ncol = 5, nrow = 6))
+for (i in 1:6){
+  chidata$fam_vs_no_spe_fam[i]<-as.character(rownames(df_sum2)[i+6])
   #chidata$Gain_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),1:2], correct=F)$statistic
-  chidata$Inc_p_value[i]<-chisq.test(df_sum2[c(i,i+7),1:2], correct=F)$p.value
+  chidata$Inc_p_value[i]<-chisq.test(df_sum2[c(i,i+6),1:2], correct=F)$p.value
   #chidata$lose_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),1:3], correct=F)$statistic
-  chidata$dec_p_value[i]<-chisq.test(df_sum2[c(i,i+7),1:3], correct=F)$p.value
+  chidata$dec_p_value[i]<-chisq.test(df_sum2[c(i,i+6),1:3], correct=F)$p.value
   #chidata$lose_Gain_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),2:3], correct=F)$statistic
-  chidata$Inc_Dec_p_value[i]<-chisq.test(df_sum2[c(i,i+7),2:3], correct=F)$p.value
+  chidata$Inc_Dec_p_value[i]<-chisq.test(df_sum2[c(i,i+6),2:3], correct=F)$p.value
   
 }
 chidata<-chidata[order(chidata$Inc_Dec_p_value),][,6:9]
@@ -2487,7 +2496,7 @@ df_sum2_fraction_mut$variable <- factor(df_sum2_fraction_mut$variable, levels = 
 
 ```{r, engine='bash', eval=F, echo=T}
 # AP1
-num<-c(1,8,15,22,29,36)
+num<-c(1,7,13,19,25,31)
 x<-df_sum2_fraction_mut[num,]
 pdf('percent peaks with or without AP1.pdf', width=8,height=5)
 print(ggplot(x, aes(x = factor(variable, level=c("Increase", "unchanged", "Decrease")), y=value, fill=factor(family, levels=c("no AP1", "AP1" )))) +  geom_bar(stat='identity',position='stack',color='black') +
@@ -2507,7 +2516,7 @@ dev.off()
 
 ```{r, engine='bash', eval=F, echo=T}
 library(ggplot2)
-num <-c(1,8,15,22,29,36)
+num<-c(1,7,13,19,25,31)
 
 temp <- df_sum2_fraction_mut[num,]
 plot_AP1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged", "Decrease")), y=value, fill=factor(family, levels=c("no AP1", "AP1" )))) +  geom_bar(stat='identity',position='stack',color='black') +
@@ -2519,17 +2528,7 @@ plot_AP1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+2,]
-plot_Jun <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged", "Decrease")), y=value, fill=factor(family, levels=c("no Jun-related factor", "Jun-related factor" )))) +  geom_bar(stat='identity',position='stack',color='black') +
-  labs(title = '% peaks with/without JUN', y = '% of Peaks', x = NULL, fill = NULL) +
-        theme_minimal() +
-        theme(panel.grid.minor = element_blank(),
-              axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("white", "darkgrey"))+
-  theme(axis.text.x=element_text(angle=45, hjust=0.9))+
-    theme(text = element_text(size = 20)) 
-
-temp <- df_sum2_fraction_mut[num+6,]
+temp <- df_sum2_fraction_mut[num+5,]
 plot_SP1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged", "Decrease")), y=value, fill=factor(family, levels=c("no SP1-like factor", "SP1-like factor" )))) +  geom_bar(stat='identity',position='stack',color='black') +
   labs(title = '% peaks with/without SP1', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
@@ -2539,7 +2538,7 @@ plot_SP1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+3,]
+temp <- df_sum2_fraction_mut[num+2,]
 plot_NFY <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged", "Decrease")), y=value, fill=factor(family, levels=c("no NFY", "NFY" )))) +  geom_bar(stat='identity',position='stack',color='black') +
   labs(title = '% peaks with/without NFY', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
@@ -2559,7 +2558,7 @@ plot_CTCF <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchange
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+4,]
+temp <- df_sum2_fraction_mut[num+3,]
 plot_Znf143 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged", "Decrease")), y=value, fill=factor(family, levels=c("no Znf143", "Znf143" )))) +  geom_bar(stat='identity',position='stack',color='black') +
   labs(title = '% peaks with/without Znf143', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
@@ -2569,9 +2568,9 @@ plot_Znf143 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchan
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+5,]
-plot_Spi1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged", "Decrease")), y=value, fill=factor(family, levels=c("no Spi1", "Spi1" )))) +  geom_bar(stat='identity',position='stack',color='black') +
-  labs(title = '% peaks with/without Spi1', y = '% of Peaks', x = NULL, fill = NULL) +
+temp <- df_sum2_fraction_mut[num+4,]
+plot_Spi1 <- ggplot(temp, aes(x = factor(variable, level=c("Increase", "unchanged", "Decrease")), y=value, fill=factor(family, levels=c("no ETS-Spi1", "ETS-Spi1" )))) +  geom_bar(stat='identity',position='stack',color='black') +
+  labs(title = '% peaks with/without ETS-Spi1', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
               axis.ticks = element_blank()) +
@@ -2588,11 +2587,11 @@ library(patchwork)
       
 pdf(file='Proportions of peaks with or without each family motif.pdf', width=12,height=10)
 
-(plot_AP1 | plot_Jun)/
-  (plot_SP1 | plot_NFY)
+(plot_AP1 | plot_SP1)/
+  ( plot_NFY | plot_CTCF)
 
-  ( plot_CTCF | plot_Znf143)/ 
-plot_Spi1
+  ( plot_Znf143 | plot_Spi1)
+
 
 dev.off()
 ```
@@ -2636,8 +2635,8 @@ unchanged_peaks$genes<-rownames(fimo.scores.nondyn.atac)
 ```
 
 ```{r, engine='bash', eval=F, echo=T}
-df_sum_withfam <-matrix(ncol=6, nrow=7)
-for (i in 1:7){
+df_sum_withfam <-matrix(ncol=6, nrow=6)
+for (i in 1:6){
   df_sum_withfam[i,1]<- as.numeric(table(is.na(unchanged_peaks[[i]]))[[1]])
   df_sum_withfam[i,2]<- as.numeric(table(is.na(down.up_peaks[[i+1]]))[[1]])
   df_sum_withfam[i,3]<- as.numeric(table(is.na(down.up.down_peaks[[i+1]]))[[1]])
@@ -2647,12 +2646,12 @@ for (i in 1:7){
  
 }
 df_sum_withfam<-as.data.frame(df_sum_withfam)
-rownames(df_sum_withfam)<-c(colnames(unchanged_peaks)[1:7])
+rownames(df_sum_withfam)<-c(colnames(unchanged_peaks)[1:6])
 colnames(df_sum_withfam)<-c("unchanged","Transient Decrease", "Oscillating Decrease","Gradual Increase","Transient Increase","Oscillating Increase")
 
-#no CRE
-df_sum_nofam <-matrix(ncol=6, nrow=7)
-for (j in 1:7){
+#no family
+df_sum_nofam <-matrix(ncol=6, nrow=6)
+for (j in 1:6){
   df_sum_nofam[j,1]<- as.numeric(table(is.na(unchanged_peaks[[j]]))[[2]])
   df_sum_nofam[j,2]<- as.numeric(table(is.na(down.up_peaks[[j+1]]))[[2]])
   df_sum_nofam[j,3]<- as.numeric(table(is.na(down.up.down_peaks[[j+1]]))[[2]])
@@ -2662,7 +2661,7 @@ for (j in 1:7){
 }
 
 df_sum_nofam<-as.data.frame(df_sum_nofam)
-rownames(df_sum_nofam)<-c("no AP1", "no CTCF-like factor", "no Jun-related factor", "no NFY",  "no Znf143", "no Spi1", "no SP1-like factor")
+rownames(df_sum_nofam)<-c("no AP1", "no CTCF-like factor",  "no NFY", "no Znf143", "no ETS-Spi1", "no SP1-like factor")
 colnames(df_sum_nofam)<-c("unchanged","Transient Decrease", "Oscillating Decrease","Gradual Increase","Transient Increase","Oscillating Increase")
 
 
@@ -2695,7 +2694,7 @@ df_sum2_fraction_mut$variable <- factor(df_sum2_fraction_mut$variable, levels = 
 
 ```{r, engine='bash', eval=F, echo=T}
 library(ggplot2)
-num <-c(1,8,15,22,29,36,43,50,57,64,71,78)
+num <-c(1,7,13,19,25,31,37,43,49,55,61,67)
 
 temp <- df_sum2_fraction_mut[num,]
 plot_AP1 <- ggplot(temp, aes(x = factor(variable, level = c("Gradual Increase","Transient Increase","Oscillating Increase","unchanged", "Transient Decrease", "Oscillating Decrease")), y=value, fill=factor(family, levels=c("no AP1", "AP1" )))) +  geom_bar(stat='identity',position='stack',color='black') +
@@ -2707,17 +2706,8 @@ plot_AP1 <- ggplot(temp, aes(x = factor(variable, level = c("Gradual Increase","
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+2,]
-plot_Jun <- ggplot(temp, aes(x = factor(variable, level = c("Gradual Increase","Transient Increase","Oscillating Increase","unchanged", "Transient Decrease", "Oscillating Decrease")), y=value, fill=factor(family, levels=c("no Jun-related factor", "Jun-related factor" )))) +  geom_bar(stat='identity',position='stack',color='black') +
-  labs(title = '% peaks with/without JUN', y = '% of Peaks', x = NULL, fill = NULL) +
-        theme_minimal() +
-        theme(panel.grid.minor = element_blank(),
-              axis.ticks = element_blank()) +
-        scale_fill_manual(values = c("beige", "chartreuse"))+
-  theme(axis.text.x=element_text(angle=45, hjust=0.9))+
-    theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+6,]
+temp <- df_sum2_fraction_mut[num+5,]
 plot_SP1 <- ggplot(temp, aes(x = factor(variable, level = c("Gradual Increase","Transient Increase","Oscillating Increase","unchanged", "Transient Decrease", "Oscillating Decrease")), y=value, fill=factor(family, levels=c("no SP1-like factor", "SP1-like factor" )))) +  geom_bar(stat='identity',position='stack',color='black') +
   labs(title = '% peaks with/without SP1', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
@@ -2727,7 +2717,7 @@ plot_SP1 <- ggplot(temp, aes(x = factor(variable, level = c("Gradual Increase","
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+3,]
+temp <- df_sum2_fraction_mut[num+2,]
 plot_NFY <- ggplot(temp, aes(x = factor(variable, level = c("Gradual Increase","Transient Increase","Oscillating Increase","unchanged", "Transient Decrease", "Oscillating Decrease")), y=value, fill=factor(family, levels=c("no NFY", "NFY" )))) +  geom_bar(stat='identity',position='stack',color='black') +
   labs(title = '% peaks with/without NFY', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
@@ -2747,7 +2737,7 @@ plot_CTCF <- ggplot(temp, aes(x = factor(variable, level = c("Gradual Increase",
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+4,]
+temp <- df_sum2_fraction_mut[num+3,]
 plot_Znf143 <- ggplot(temp, aes(x = factor(variable,level = c("Gradual Increase","Transient Increase","Oscillating Increase","unchanged", "Transient Decrease", "Oscillating Decrease")), y=value, fill=factor(family, levels=c("no Znf143", "Znf143" )))) +  geom_bar(stat='identity',position='stack',color='black') +
   labs(title = '% peaks with/without Znf143', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
@@ -2757,7 +2747,7 @@ plot_Znf143 <- ggplot(temp, aes(x = factor(variable,level = c("Gradual Increase"
   theme(axis.text.x=element_text(angle=45, hjust=0.9))+
     theme(text = element_text(size = 20)) 
 
-temp <- df_sum2_fraction_mut[num+5,]
+temp <- df_sum2_fraction_mut[num+4,]
 plot_Spi1 <- ggplot(temp, aes(x = factor(variable, level = c("Gradual Increase","Transient Increase","Oscillating Increase","unchanged", "Transient Decrease", "Oscillating Decrease")), y=value, fill=factor(family, levels=c("no Spi1", "Spi1" )))) +  geom_bar(stat='identity',position='stack',color='black') +
   labs(title = '% peaks with/without Spi1', y = '% of Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
@@ -2775,11 +2765,10 @@ library(patchwork)
 
 pdf(file='Proportions of peaks with or without each family motif by cluster.pdf', width=15,height=10)
 
-(plot_AP1 | plot_Jun)/
-  (plot_SP1 | plot_NFY)
+ (plot_AP1 | plot_SP1)/
+  ( plot_NFY | plot_CTCF)
 
-  ( plot_CTCF | plot_Znf143)/ 
-plot_Spi1
+  ( plot_Znf143 | plot_Spi1)
 
 dev.off()
 ```
@@ -2818,11 +2807,12 @@ plot.df$score = sapply(plot.df$genes,func)
 ```
 
 ```{r, engine='bash', eval=F, echo=T}
+# library(lattice)
 pdf(file = paste0('fimo.scores.isolated.peaks.violin.pdf'),width=12,height=8)
 
-trellis.par.set(box.umbrella = list(lty = 1, col=c("red", "blue"), lwd=2),
-                box.rectangle = list( lwd=2.0, col=c("red", "blue"), alpha = 1.0),
-                plot.symbol = list(col=c("red", "blue"), lwd=2.0, pch ='.'))
+trellis.par.set(box.umbrella = list(lty = 1, col=c("blue", "red"), lwd=2),
+                box.rectangle = list( lwd=2.0, col=c( "blue","red"), alpha = 1.0),
+                plot.symbol = list(col=c( "blue", "red"), lwd=2.0, pch ='.'))
 
 print(
     bwplot(log(as.numeric(as.character(score)), base = 10) ~ status | family, data = plot.df, 
@@ -2830,7 +2820,7 @@ print(
            scales=list(x=list(cex=1.0, relation = "free", rot = 45), y = list(cex=1.0, relation="free")),
            aspect=2.0,
            between=list(y=0.5, x=0.5),
-           index.cond=list(c(1,3,5,4,2,7,6)),
+           index.cond=list(c(1,4,5,2,6,3)),
            ylab = expression('log'[10]* paste('(motif scores)')),
            xlab = expression('ATAC Peak category'),
                                         #manually setting to avoid outlier, since do.out = FALSE                
@@ -2977,8 +2967,10 @@ bed.window <- function(bed, half.window) {
   return(bed)
   }
 
-load('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif/plot.df.atac.Rdata')
-load('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif/fimo.scores.atac.Rdata')
+load('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif2/plot.df.atac.Rdata')
+load('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif2/fimo.scores.atac.Rdata')
+
+# colnames(fimo.scores.atac)<- c("AP1", "CTCF-like factor",  "NFY", "Znf143", "ETS-Spi1", "SP1-like factor" )
 
 plot.df = data.frame()
 for(i in 1:ncol(fimo.scores.atac)) {
@@ -2998,7 +2990,7 @@ colnames(all.fimo) = c('density', 'tf', 'category', 'range')
 
 half.win = 600
 file.suffix = '_mm39_instances.bigWig'
-dir = '/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif/fimo_top_database_PSWM'
+dir = '/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif2/fimo_top_database_PSWM'
 setwd(dir)
 
 decreased = plot.df[plot.df$status == 'Decrease',12:14]
@@ -3011,11 +3003,10 @@ increased[,2] = as.numeric(increased[,2])
 increased[,3] = as.numeric(increased[,3])
 increased = bed.window(increased,half.win)
 
-not.different = read.table('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif/nondynamic_peaks.bed')
+not.different = read.table('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif2/nondynamic_peaks.bed')
 not.different = not.different[not.different$V1 != 'chrM',]
-not.different = bed.window(not.different,half.win)
+not.different = bed.window(not.different, half.win)
 
-all.fimo = data.frame()
 
 for(i in 1:ncol(fimo.scores.atac)) {
     factor = colnames(fimo.scores.atac)[i]
@@ -3046,7 +3037,7 @@ for(i in 1:ncol(fimo.scores.atac)) {
     
     tf.all = rbind(dec.query.df, inc.query.df, ctrl.query.df)
 
-    all.fimo = rbind(all.fimo,tf.all)
+    all.fimo = rbind(all.fimo, tf.all)
 }
 
 all.fimo[,1] = as.numeric(all.fimo[,1])
@@ -3076,7 +3067,7 @@ plot.fimo.lattice <- function(dat, fact = 'Motif', summit = 'Hypersensitivity Su
                  par.strip.text=list(cex=0.9, font=1, col='black',font=2),
                  aspect=1.0,
                  between=list(y=0.5, x=0.5),
-                 index.cond = list(c(1,3,7,4,2,5,6)),
+                 index.cond = list(c(2,4,5,1,6,3)),
                  lwd=2,
                  ylab = list(label = "Weighted Motif Density", cex =1,font=2),
                  xlab = list(label = 'Distance from ATAC-seq Peak Summit', cex =1,font=2),
@@ -3093,8 +3084,9 @@ plot.fimo.lattice(all.fimo, num.m = -500, num.p = 500,
                   col.lines = c('blue','red','grey65'))
 ```
 
-
 ![motif_density](motif_enrichment_around_summits.pdf)
+
+
 ## by supercluster
 module load R/4.1.2
 ```{r, engine='bash', eval=F, echo=T}
@@ -3155,12 +3147,11 @@ down.up.down[,3] = as.numeric(down.up.down[,3])
 down.up.down = bed.window(down.up.down,half.win)
 
 
-not.different = read.table('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif/nondynamic_peaks.bed')
+not.different = read.table('/home/FCAM/ssun/motifanalysis/meme_motif_enrichment2/new_denovo_motif2/nondynamic_peaks.bed')
 not.different = not.different[not.different$V1 != 'chrM',]
 not.different = bed.window(not.different,half.win)
 
 
-all.fimo2 = data.frame()
 for(i in 1:ncol(fimo.scores.atac)) {
     factor = colnames(fimo.scores.atac)[i]
 
@@ -3225,7 +3216,7 @@ all.fimo2[,1] = as.numeric(all.fimo2[,1])
 all.fimo2[,4] = as.numeric(all.fimo2[,4])
 
 
-save(all.fimo2, file="all.fimo2.Rdata")
+# save(all.fimo2, file="all.fimo2.Rdata")
 ```
 
 ```{r,engine='bash', eval=F, echo=T}
@@ -3251,7 +3242,7 @@ plot.fimo.lattice <- function(dat, fact = 'Motif', summit = 'Hypersensitivity Su
                  par.strip.text=list(cex=0.9, font=1, col='black',font=2),
                  aspect=1.0,
                  between=list(y=0.5, x=0.5),
-                 index.cond = list(c(1,3,7,4,2,5,6)),
+                 index.cond = list(c(2,4,5,1,6,3)),
                  lwd=1,
                  ylab = list(label = "Weighted Motif Density", cex =1,font=2),
                  xlab = list(label = 'Distance from ATAC-seq Peak Summit', cex =1,font=2),
@@ -3272,7 +3263,7 @@ plot.fimo.lattice(all.fimo2, num.m = -500, num.p = 500,
 ![motif_density_bycluster](motif_enrichment_around_summits_by_cluster.pdf)
 
 ### Q: is a motif specific to clusters/group of clusters that share kinetic profiles?
-AP1, JUN, SP1, NFY (based on chi test and bar plot); \
+AP1, SP1, NFY (based on chi test and bar plot); \
 
 
 ### Plot traces of isolated peaks 
@@ -3282,7 +3273,7 @@ only for the four candidates motif: AP1, JUN, SP1, NFY \
 ```{r, engine='bash', eval=F, echo=T}
 plot.df = data.frame()
 
-fimo.scores.atac.subset<-fimo.scores.atac[, c(1,3,7,4)]
+fimo.scores.atac.subset<-fimo.scores.atac[, c(1,3,6)]
 
 for(i in 1:ncol(fimo.scores.atac.subset)) {
       scores.temp = fimo.scores.atac.subset[!is.na(fimo.scores.atac.subset[,i]),]
@@ -3311,7 +3302,7 @@ cat.colours <- cat.colours[match(levels(plot.df$genes), cat.colours$genes), ]
 
 
 ```{r, engine='bash', eval=F, echo=T}
-pdf(file = 'four_isolated_families_dynamic_accessibility.pdf',width=14,height=14)
+pdf(file = 'three_isolated_families_dynamic_accessibility.pdf',width=14,height=14)
 
 trellis.par.set(box.umbrella = list(lty = 1, col="black", lwd=1),
                 box.rectangle = list( lwd=1.0, col="black", alpha = 1.0),
@@ -3321,10 +3312,10 @@ print(
     xyplot(value ~  sample.conditions | family, group = genes, data = plot.df, type = c('l'), #type = c('l','p'),
        scales=list(x=list(cex=1.5,relation = "free", rot = 45), y =list(cex=1.5, relation="free")),
        aspect=1.0,
-       layout = c(4,1),
+       layout = c(3,1),
        between=list(y=0.5, x=0.5),
        
-       main = list(label = 'Four Isolated Family Motifs in Dynamic Peaks', cex = 2.0),
+       main = list(label = 'Three Isolated Family Motifs in Dynamic Peaks', cex = 2.0),
        ylab = list(label = 'Normalized ATAC signal', cex =2.0),
        xlab = list(label = 'Time (minutes)', cex =2.0),
        par.settings = list(superpose.symbol = list(pch = c(16),col=c('grey20'), cex = 2.0),
@@ -3341,22 +3332,21 @@ print(
 dev.off()
 ```
 
-![traces](four_isolated_families_dynamic_accessibility.pdf)
+![traces](three_isolated_families_dynamic_accessibility.pdf)
+
+
 ```{r, engine='bash', eval=F, echo=T}
-# calculate trace number for AP1, JUN, SP1, NFY 
+# calculate trace number for AP1, SP1, NFY 
 plot.df$status = 'Increase'
 plot.df[plot.df$supercluster == 'Transient Decrease' | plot.df$supercluster == 'Oscillating Decrease',]$status = 'Decrease'
 
 plot.df.AP1<-plot.df[plot.df$family=="AP1",]
-plot.df.JUN<-plot.df[plot.df$family=="Jun-related factor",]
 plot.df.SP1<-plot.df[plot.df$family=="SP1-like factor",]
 plot.df.NFY<-plot.df[plot.df$family=="NFY",]
 
 length(unique(plot.df.AP1[plot.df.AP1$status=="Increase",]$genes))
 length(unique(plot.df.AP1[plot.df.AP1$status=="Decrease",]$genes))
 
-length(unique(plot.df.JUN[plot.df.JUN$status=="Increase",]$genes))
-length(unique(plot.df.JUN[plot.df.JUN$status=="Decrease",]$genes))
 
 length(unique(plot.df.SP1[plot.df.SP1$status=="Increase",]$genes))
 length(unique(plot.df.SP1[plot.df.SP1$status=="Decrease",]$genes))
@@ -3365,7 +3355,7 @@ length(unique(plot.df.NFY[plot.df.NFY$status=="Increase",]$genes))
 length(unique(plot.df.NFY[plot.df.NFY$status=="Decrease",]$genes))
 
 ```
-![traces](modified_four_isolated_families_dynamic_accessibility.pdf)
+![traces](modified_three_isolated_families_dynamic_accessibility.pdf)
 
 
 
