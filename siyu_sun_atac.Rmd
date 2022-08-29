@@ -2320,7 +2320,7 @@ dev.off()
 
 ```{r engine='bash', eval=F, echo=T}
 #library(ggplot2)
-pdf(file='number of dynamic peaks in each family motif.pdf',width=12,height=7)
+pdf(file='number of dynamic peaks in each family motif.pdf',width=10,height=7)
 print(
         ggplot(df[1:14,],aes(x = reorder(names,-index),y = num,fill=cond)) +
         geom_bar(stat='identity',position='stack',color='black') +
@@ -2328,6 +2328,7 @@ print(
         labs(title = 'Number of Peaks For Each Motif Family', y = 'Number of Dynamic Peaks', x = NULL, fill = NULL) +
         theme_minimal() +
         theme(panel.grid.minor = element_blank(),
+              panel.grid.major = element_blank(),
               axis.ticks = element_blank(),
               axis.text.x = element_text(angle=45,size=20,hjust=.99,vjust=1,color='black',face='bold'),
               axis.text.y = element_text(size=20,face='bold',color='black'),
@@ -2382,7 +2383,7 @@ dev.off()
 
 ![motif_occurance](percent of each motif family occurrance.pdf)
 
-### ChiSq test
+### Statistical test
 
 ```{r engine='bash', eval=F, echo=T}
 fimo.scores.atac1<-fimo.scores.atac
@@ -2457,16 +2458,15 @@ df_sum2<-rbind(df_sum_nofam, df_sum_withfam)
 # write.csv(df_sum2, file='peak number of motif.csv')
 ```
 
+1) chi test \
 
 ```{r, engine='bash', eval=F, echo=T}
 chidata = data.frame(matrix(ncol = 5, nrow = 6))
 for (i in 1:6){
   chidata$fam_vs_no_spe_fam[i]<-as.character(rownames(df_sum2)[i+6])
-  #chidata$Gain_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),1:2], correct=F)$statistic
+  
   chidata$Inc_p_value[i]<-chisq.test(df_sum2[c(i,i+6),1:2], correct=F)$p.value
-  #chidata$lose_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),1:3], correct=F)$statistic
-  chidata$dec_p_value[i]<-chisq.test(df_sum2[c(i,i+6),1:3], correct=F)$p.value
-  #chidata$lose_Gain_X_squared[i]<-chisq.test(df_sum2[c(i,i+9),2:3], correct=F)$statistic
+  chidata$dec_p_value[i]<-chisq.test(df_sum2[c(i,i+6),c(1,3)], correct=F)$p.value
   chidata$Inc_Dec_p_value[i]<-chisq.test(df_sum2[c(i,i+6),2:3], correct=F)$p.value
   
 }
@@ -2474,6 +2474,32 @@ chidata<-chidata[order(chidata$Inc_Dec_p_value),][,6:9]
 ```
 
 ![chisq_test](chidata.pdf)
+
+
+2) Fisher test \
+```{r, engine='bash', eval=F, echo=T}
+# Fisher’s exact test is a non-parametric method for comparing the proportion of categories in two different independent groups (categorical [nominal] variables) in a contingency table. The categorical variables should be measured dichotomously for 2x2 contingency table (e.g., male/female, treated/no treated, cured/no cured, etc.,). Fisher’s exact test is proposed by Ronald A. Fisher in 1934.
+# Unlike the chi-square test, the Fisher’s exact test is an exact test (returns exact p value) and can be applied on smaller sample sizes (<1000). This test is an alternative to the chi-square test, especially when the frequency count is < 5 for more than 20% of cells. If you have larger sample size, it is better to use chi-square test.
+# In the Fisher’s exact test, the probability of getting results (observed frequencies) is directly calculated from hypergeometric distribution and not from using any test statistics.
+# Fisher’s exact test is most commonly used to analyze a 2x2 contingency table, but it can also be used to analyze data from a larger contingency table. Fisher’s exact test is computationally intensive for larger contingency tables and may not be available in all statistical software.
+# Fisher’s exact test is used when there is at least one cell in the contingency table of the expected frequencies below 5. To retrieve the expected frequencies, use the chisq.test() function together with $expected
+
+# greater (or less) refers to a one-sided test comparing a null hypothesis that p1=p2 to the alternative p1>p2 (or p1<p2). In contrast, a two-sided test compares the null hypotheses to the alternative that p1 is not equal to p2.
+
+fisherdata = data.frame(matrix(ncol = 5, nrow = 6))
+for (i in 1:6){
+  fisherdata$fam_vs_no_spe_fam[i]<-as.character(rownames(df_sum2)[i+6])
+  
+  fisherdata$Inc_p_value[i]<-as.numeric(fisher.test(df_sum2[c(i,i+6),1:2], alternative="greater")[1])
+  fisherdata$dec_p_value[i]<-as.numeric(fisher.test(df_sum2[c(i,i+6),c(1,3)], alternative="less")[1])
+  fisherdata$Inc_Dec_p_value[i]<-as.numeric(fisher.test(df_sum2[c(i,i+6),2:3], alternative="two.sided")[1])
+  
+}
+fisherdata<-fisherdata[order(fisherdata$Inc_p_value),][,6:9]
+
+```
+
+![chisq_test](fisherdata.pdf)
 
 ### bar plot
 
@@ -3067,7 +3093,8 @@ plot.fimo.lattice <- function(dat, fact = 'Motif', summit = 'Hypersensitivity Su
                  par.strip.text=list(cex=0.9, font=1, col='black',font=2),
                  aspect=1.0,
                  between=list(y=0.5, x=0.5),
-                 index.cond = list(c(2,4,5,1,6,3)),
+                 index.cond = list(c(2,4,5,1,6,3)), #index.cond = list(c(1,6,3))
+                 # layout = c(3,1),
                  lwd=2,
                  ylab = list(label = "Weighted Motif Density", cex =1,font=2),
                  xlab = list(label = 'Distance from ATAC-seq Peak Summit', cex =1,font=2),
@@ -3268,7 +3295,7 @@ AP1, SP1, NFY (based on chi test and bar plot); \
 
 ### Plot traces of isolated peaks 
 
-only for the four candidates motif: AP1, JUN, SP1, NFY \
+only for the four candidates motif: AP1, SP1, NFY \
 
 ```{r, engine='bash', eval=F, echo=T}
 plot.df = data.frame()
@@ -3312,6 +3339,7 @@ print(
     xyplot(value ~  sample.conditions | family, group = genes, data = plot.df, type = c('l'), #type = c('l','p'),
        scales=list(x=list(cex=1.5,relation = "free", rot = 45), y =list(cex=1.5, relation="free")),
        aspect=1.0,
+       par.strip.text=list(cex=2, lines=1, font=1, col='black'),
        layout = c(3,1),
        between=list(y=0.5, x=0.5),
        
